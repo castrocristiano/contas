@@ -80,10 +80,10 @@ class Transaction(SQLModel, table=True):
 
     source_account: Account = Relationship(
         back_populates="outgoing_transactions",
-        sa_relationship_kwargs={"foreign_keys": [source_account_id]},
+        sa_relationship_kwargs={"foreign_keys": "[Transaction.source_account_id]"},
     )
     destination_account: Account | None = Relationship(
         back_populates="incoming_transactions",
-        sa_relationship_kwargs={"foreign_keys": [destination_account_id]},
+        sa_relationship_kwargs={"foreign_keys": "[Transaction.destination_account_id]"},
     )
     category: Category | None = Relationship(back_populates="transactions")
