@@ -6,6 +6,7 @@ on:
       - develop
       - main
       - 'phase/**'
+      - 'feature/**'
   pull_request:
     branches:
       - develop
@@ -44,11 +45,11 @@ jobs:
       - name: Run Unit Tests
         run: uv run pytest -v
 
-  # Abre PR de branch de fase → develop (após build bem-sucedido)
+  # Abre PR de branch de fase ou feature → develop (após build bem-sucedido)
   auto-pr-to-develop:
     name: Open PR to develop
     needs: build-and-test
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/phase/')
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/phase/') || startsWith(github.ref, 'refs/heads/feature/'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -70,7 +71,7 @@ jobs:
               --base develop \
               --head "$BRANCH" \
               --title "feat: $BRANCH" \
-              --body $'### Pull Request de Fase\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
+              --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
           fi
 
   # Abre PR de develop → main (após build bem-sucedido)

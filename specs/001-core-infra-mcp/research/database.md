@@ -44,6 +44,7 @@ from decimal import Decimal
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Numeric
 
+
 class TransactionBase(SQLModel):
     amount: Decimal = Field(
         sa_type=Numeric(precision=14, scale=2),
@@ -70,10 +71,12 @@ import sqlalchemy as sa
 from sqlmodel import SQLModel, Field
 from sqlalchemy import Column
 
+
 class TransactionType(StrEnum):
-    INCOME   = "income"
-    EXPENSE  = "expense"
+    INCOME = "income"
+    EXPENSE = "expense"
     TRANSFER = "transfer"
+
 
 class Transaction(SQLModel, table=True):
     __tablename__ = "transaction"
@@ -99,7 +102,7 @@ from contextlib import asynccontextmanager
 engine = create_async_engine(
     DATABASE_URL,
     echo=False,
-    pool_pre_ping=True,   # detecta conexões mortas
+    pool_pre_ping=True,  # detecta conexões mortas
     pool_size=10,
     max_overflow=20,
 )
@@ -111,6 +114,7 @@ async_session_factory = async_sessionmaker(
     autoflush=False,
     expire_on_commit=False,  # OBRIGATÓRIO em async: previne MissingGreenlet
 )
+
 
 @asynccontextmanager
 async def get_session() -> AsyncGenerator[AsyncSession, None]:
@@ -146,8 +150,8 @@ target_metadata = SQLModel.metadata
 context.configure(
     connection=connection,
     target_metadata=target_metadata,
-    compare_type=True,           # OBRIGATÓRIO: detecta mudanças em Numeric e Enum
-    compare_server_default=True, # detecta mudanças em defaults do banco
+    compare_type=True,  # OBRIGATÓRIO: detecta mudanças em Numeric e Enum
+    compare_server_default=True,  # detecta mudanças em defaults do banco
 )
 ```
 
