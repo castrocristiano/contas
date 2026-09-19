@@ -98,6 +98,45 @@ O desenvolvimento de novas funcionalidades segue o ciclo do **Spec-Driven Develo
 
 ---
 
+## 🚀 Como Executar
+
+### 1. Inicializar infraestrutura e banco de dados
+
+```bash
+# Subir o banco PostgreSQL via podman-compose
+podman-compose up -d
+
+# Executar as migrações do banco com Alembic
+uv run alembic upgrade head
+```
+
+### 2. Iniciar o Servidor MCP
+
+```bash
+# Modo inspeção interativa via browser (MCP Inspector)
+uv run mcp dev src/contas/server.py
+
+# Ou execução direta via módulo stdio (para Claude Desktop / Antigravity)
+uv run python -m contas
+```
+
+---
+
+## 🛠️ Ferramentas MCP Disponíveis
+
+O servidor expõe as seguintes ferramentas em conformidade com o protocolo MCP:
+
+- `create_account`: Cria uma nova conta financeira com saldo inicial.
+- `list_accounts`: Lista todas as contas com saldo atual e soma consolidada.
+- `record_transaction`: Registra receita, despesa ou transferência atualizando saldos atomicamente.
+- `get_statement`: Retorna o extrato detalhado de uma conta em determinado período com resumo.
+- `get_financial_summary`: Consolida patrimônio total de todas as contas ativas.
+- `health_check`: Verifica o status operacional do servidor MCP e conexão com PostgreSQL.
+
+Para detalhes de schemas de entrada e saída, consulte o documento de [Contratos MCP](specs/001-core-infra-mcp/contracts/mcp-tools.md).
+
+---
+
 ## 📄 Licença
 
 Este projeto é distribuído sob a licença **GNU General Public License v3.0** (GPL-3.0). Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.

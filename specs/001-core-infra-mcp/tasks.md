@@ -112,11 +112,11 @@
 
 ## Fase Final: Polish e Concerns Transversais
 
-- [ ] T035 [P] Atualizar `README.md`: adicionar seção "Como executar" com `podman-compose up -d`, `uv run alembic upgrade head`, `uv run mcp dev src/contas/server.py`; seção "Ferramentas MCP disponíveis" com link para [contracts/mcp-tools.md](./specs/001-core-infra-mcp/contracts/mcp-tools.md)
-- [ ] T036 [P] Atualizar `.gitignore`: adicionar `postgres_data/`, `.env`, `migrations/versions/*.py` não — manter migrações versionadas
-- [ ] T037 Executar validação completa do [quickstart.md](./quickstart.md): cenários P1, P2, P3 e `health_check`
-- [ ] T038 Executar `uv run ruff check .` e `uv run ruff format .` — corrigir todos os avisos
-- [ ] T039 Fazer commit final com mensagem `feat(001): implementar infraestrutura base e servidor MCP de financas`
+- [x] T035 [P] Atualizar `README.md`: adicionar seção "Como executar" com `podman-compose up -d`, `uv run alembic upgrade head`, `uv run mcp dev src/contas/server.py`; seção "Ferramentas MCP disponíveis" com link para [contracts/mcp-tools.md](./specs/001-core-infra-mcp/contracts/mcp-tools.md)
+- [x] T036 [P] Atualizar `.gitignore`: adicionar `postgres_data/`, `.env`, `migrations/versions/*.py` não — manter migrações versionadas
+- [x] T037 Executar validação completa do [quickstart.md](./quickstart.md): cenários P1, P2, P3 e `health_check`
+- [x] T038 Executar `uv run ruff check .` e `uv run ruff format .` — corrigir todos os avisos
+- [x] T039 Fazer commit final com mensagem `feat(001): implementar infraestrutura base e servidor MCP de financas`
 
 ---
 
