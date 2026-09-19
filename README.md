@@ -120,6 +120,13 @@ uv run mcp dev src/contas/server.py
 uv run python -m contas
 ```
 
+### 3. Iniciar a Interface Web (Streamlit Frontend)
+
+```bash
+# Inicia o painel gráfico no navegador em http://localhost:8501
+uv run streamlit run src/contas/ui/app.py
+```
+
 ---
 
 ## 🛠️ Ferramentas MCP Disponíveis
