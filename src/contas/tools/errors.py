@@ -46,6 +46,15 @@ class CategoryNotFoundError(ContasError):
         )
 
 
+class CategoryAlreadyExistsError(ContasError):
+    def __init__(self, name: str) -> None:
+        super().__init__(
+            code="CATEGORY_ALREADY_EXISTS",
+            message=f"Category with name '{name}' already exists.",
+            details={"name": name},
+        )
+
+
 class TransferSameAccountError(ContasError):
     def __init__(self, account_id: str) -> None:
         super().__init__(

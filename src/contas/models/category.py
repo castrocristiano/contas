@@ -7,6 +7,7 @@ from sqlalchemy import Column
 from sqlmodel import Field, Relationship, SQLModel
 
 if TYPE_CHECKING:
+    from contas.models.budget import Budget
     from contas.models.transaction import Transaction
 
 
@@ -29,6 +30,10 @@ class Category(SQLModel, table=True):
     is_active: bool = Field(default=True, nullable=False)
 
     transactions: list["Transaction"] = Relationship(
+        back_populates="category",
+        sa_relationship_kwargs={"passive_deletes": True},
+    )
+    budgets: list["Budget"] = Relationship(
         back_populates="category",
         sa_relationship_kwargs={"passive_deletes": True},
     )

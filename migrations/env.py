@@ -13,7 +13,7 @@ from sqlmodel import SQLModel
 # Import all models so SQLModel.metadata is fully populated before autogenerate.
 # New models must be imported here to be detected by Alembic.
 from contas.config import settings
-from contas.models import Account, Category, Transaction  # noqa: F401
+from contas.models import Account, Budget, Category, Transaction  # noqa: F401
 
 # Alembic Config object — provides access to the .ini file values.
 config = context.config
