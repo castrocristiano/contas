@@ -5,6 +5,7 @@ on:
     branches:
       - develop
       - main
+      - 'phase/**'
   pull_request:
     branches:
       - develop
@@ -43,7 +44,37 @@ jobs:
       - name: Run Unit Tests
         run: uv run pytest -v
 
-  auto-pr:
+  # Abre PR de branch de fase → develop (após build bem-sucedido)
+  auto-pr-to-develop:
+    name: Open PR to develop
+    needs: build-and-test
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/phase/')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check or create Pull Request to develop
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          EXISTING_PR=$(gh pr list --base develop --head "$BRANCH" --state open --json number --jq '.[0].number')
+          if [ -n "$EXISTING_PR" ]; then
+            echo "Pull Request #$EXISTING_PR já existe de $BRANCH para develop."
+          else
+            echo "Criando Pull Request de $BRANCH para develop..."
+            gh pr create \
+              --base develop \
+              --head "$BRANCH" \
+              --title "feat: $BRANCH" \
+              --body $'### Pull Request de Fase\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
+          fi
+
+  # Abre PR de develop → main (após build bem-sucedido)
+  auto-pr-to-main:
     name: Open PR to main
     needs: build-and-test
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
@@ -62,11 +93,10 @@ jobs:
           if [ -n "$EXISTING_PR" ]; then
             echo "Pull Request #$EXISTING_PR já existe de develop para main."
           else
-            echo "Criando novo Pull Request de develop para main..."
+            echo "Criando Pull Request de develop para main..."
             gh pr create \
               --base main \
               --head develop \
               --title "chore: merge develop into main" \
-              --body $'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch \`develop\`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com \`uv\`\n- [x] Linter e validação de formatação com \`ruff\`\n- [x] Execução de testes unitários com \`pytest\`'
+              --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
           fi
-
