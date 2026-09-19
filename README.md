@@ -131,9 +131,13 @@ O servidor expõe as seguintes ferramentas em conformidade com o protocolo MCP:
 - `record_transaction`: Registra receita, despesa ou transferência atualizando saldos atomicamente.
 - `get_statement`: Retorna o extrato detalhado de uma conta em determinado período com resumo.
 - `get_financial_summary`: Consolida patrimônio total de todas as contas ativas.
+- `create_category`: Cria uma nova categoria de receitas ou despesas.
+- `list_categories`: Lista categorias cadastradas com filtros opcionais por tipo e status.
+- `set_budget`: Define ou atualiza o teto orçamentário mensal para uma categoria de despesa.
+- `get_budget_status`: Consulta o status de execução orçamentária e consumo por período.
 - `health_check`: Verifica o status operacional do servidor MCP e conexão com PostgreSQL.
 
-Para detalhes de schemas de entrada e saída, consulte o documento de [Contratos MCP](specs/001-core-infra-mcp/contracts/mcp-tools.md).
+Para detalhes de schemas de entrada e saída, consulte os contratos em [001-core-infra-mcp](specs/001-core-infra-mcp/contracts/mcp-tools.md) e [002-categories-and-budgets](specs/002-categories-and-budgets/contracts/mcp-tools.md).
 
 ---
 
