@@ -98,13 +98,13 @@
 
 ### Implementação
 
-- [ ] T031 [US3] Criar `src/contas/tools/errors.py`: exceções customizadas `ValidationError`, `AccountNotFoundError`, `CategoryNotFoundError`, `TransferSameAccountError`, `DatabaseError` com código (`error_code`) e mensagem estruturada — ver contratos de erro em [contracts/mcp-tools.md](./contracts/mcp-tools.md)
-- [ ] T032 [US3] Adicionar tratamento de erros em `src/contas/tools/accounts.py` e `src/contas/tools/transactions.py`: capturar `AccountNotFoundError` (conta inexistente ou inativa), `TransferSameAccountError`, erros de FK do PostgreSQL (`IntegrityError`), erros de conexão; retornar estrutura `{"error": {"code": "...", "message": "...", "details": {...}}}` — ver [contracts/mcp-tools.md](./contracts/mcp-tools.md)
-- [ ] T033 [US3] Adicionar `model_validator` em `RecordTransactionInput` em `src/contas/schemas/transaction.py`: validar que `amount` é convertível para `Decimal` e `> 0`, rejeitar formatos inválidos como `"abc"`, `"1.555"` (mais de 2 casas decimais), `"0.00"`, `"-5.00"`
+- [x] T031 [US3] Criar `src/contas/tools/errors.py`: exceções customizadas `ValidationError`, `AccountNotFoundError`, `CategoryNotFoundError`, `TransferSameAccountError`, `DatabaseError` com código (`error_code`) e mensagem estruturada — ver contratos de erro em [contracts/mcp-tools.md](./contracts/mcp-tools.md)
+- [x] T032 [US3] Adicionar tratamento de erros em `src/contas/tools/accounts.py` e `src/contas/tools/transactions.py`: capturar `AccountNotFoundError` (conta inexistente ou inativa), `TransferSameAccountError`, erros de FK do PostgreSQL (`IntegrityError`), erros de conexão; retornar estrutura `{"error": {"code": "...", "message": "...", "details": {...}}}` — ver [contracts/mcp-tools.md](./contracts/mcp-tools.md)
+- [x] T033 [US3] Adicionar `model_validator` em `RecordTransactionInput` em `src/contas/schemas/transaction.py`: validar que `amount` é convertível para `Decimal` e `> 0`, rejeitar formatos inválidos como `"abc"`, `"1.555"` (mais de 2 casas decimais), `"0.00"`, `"-5.00"`
 
 ### Testes
 
-- [ ] T034 [P] [US3] Criar `tests/integration/test_tools.py`: testes de integração com banco real (SQLite in-memory ou PostgreSQL de teste) — `record_transaction` com `amount="0.00"` retorna erro `VALIDATION_ERROR`; `record_transaction` com `source_account_id` inexistente retorna `ACCOUNT_NOT_FOUND`; transfer com `source == destination` retorna `TRANSFER_SAME_ACCOUNT`; banco permanece inalterado após qualquer erro
+- [x] T034 [P] [US3] Criar `tests/integration/test_tools.py`: testes de integração com banco real (SQLite in-memory ou PostgreSQL de teste) — `record_transaction` com `amount="0.00"` retorna erro `VALIDATION_ERROR`; `record_transaction` com `source_account_id` inexistente retorna `ACCOUNT_NOT_FOUND`; transfer com `source == destination` retorna `TRANSFER_SAME_ACCOUNT`; banco permanece inalterado após qualquer erro
 
 **Checkpoint**: Todos os cenários P3 da spec rejeitados com erros estruturados. `uv run pytest -v` 100% verde.
 

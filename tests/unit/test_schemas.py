@@ -87,6 +87,13 @@ def test_record_transaction_input_rejects_invalid_amount_format():
             source_account_id=uuid4(),
         )
 
+    with pytest.raises(ValidationError):
+        RecordTransactionInput(
+            amount="1.555",  # More than 2 decimals
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=uuid4(),
+        )
+
 
 def test_record_transaction_input_transfer_requires_destination():
     with pytest.raises(ValidationError, match="destination_account_id is required"):
