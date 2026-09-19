@@ -26,9 +26,7 @@ async def test_record_installment_purchase_lifecycle(server):
     create_category_handler = server._tool_manager._tools["create_category"].fn
     record_tx_handler = server._tool_manager._tools["record_transaction"].fn
     get_statement_handler = server._tool_manager._tools["get_statement"].fn
-    get_installment_plan_handler = server._tool_manager._tools[
-        "get_installment_plan"
-    ].fn
+    get_installment_plan_handler = server._tool_manager._tools["get_installment_plan"].fn
 
     # 1. Create account with R$ 1000.00
     account = await create_account_handler(
@@ -86,9 +84,7 @@ async def test_record_installment_purchase_lifecycle(server):
     assert "transactions" in statement
     # Should contain all 3 installments
     installment_txs = [
-        t
-        for t in statement["transactions"]
-        if t.get("installment_id") == installment_id
+        t for t in statement["transactions"] if t.get("installment_id") == installment_id
     ]
     assert len(installment_txs) == 3
     assert [t["amount"] for t in installment_txs] == ["33.34", "33.33", "33.33"]
@@ -110,3 +106,4 @@ async def test_record_installment_purchase_lifecycle(server):
     assert plan["paid_installments"] == 1
     assert plan["remaining_installments"] == 2
     assert len(plan["installments"]) == 3
+

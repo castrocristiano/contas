@@ -1,11 +1,9 @@
 import calendar
 from datetime import datetime
-from decimal import ROUND_FLOOR, Decimal
+from decimal import Decimal, ROUND_FLOOR
 
 
-def calculate_installments(
-    total_amount: Decimal, total_installments: int
-) -> list[Decimal]:
+def calculate_installments(total_amount: Decimal, total_installments: int) -> list[Decimal]:
     """
     Splits total_amount into total_installments Decimal amounts.
     Any fraction of cents is added to the first installment so that:
@@ -15,9 +13,7 @@ def calculate_installments(
         raise ValueError("total_installments must be greater than 0")
 
     # Base installment amount truncated to 2 decimal places
-    base = (total_amount / Decimal(total_installments)).quantize(
-        Decimal("0.01"), rounding=ROUND_FLOOR
-    )
+    base = (total_amount / Decimal(total_installments)).quantize(Decimal("0.01"), rounding=ROUND_FLOOR)
     remainder = total_amount - (base * Decimal(total_installments))
 
     installments = []
@@ -43,3 +39,4 @@ def add_months(source_dt: datetime, months: int) -> datetime:
     day = min(source_dt.day, last_day)
 
     return source_dt.replace(year=year, month=month, day=day)
+
