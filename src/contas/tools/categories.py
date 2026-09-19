@@ -1,5 +1,6 @@
 from mcp.server.mcpserver import MCPServer
-from sqlalchemy.exc import DBAPIError, IntegrityError as SAIntegrityError
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import IntegrityError as SAIntegrityError
 from sqlmodel import select
 
 from contas.db.session import get_session
@@ -65,7 +66,9 @@ def register_category_tools(mcp: MCPServer) -> None:
                 if payload.category_type:
                     query = query.where(Category.category_type == payload.category_type)
 
-                categories = (await session.exec(query.order_by(Category.name.asc()))).all()
+                categories = (
+                    await session.exec(query.order_by(Category.name.asc()))
+                ).all()
 
             cat_responses = [
                 CategoryResponse(
@@ -86,4 +89,3 @@ def register_category_tools(mcp: MCPServer) -> None:
             return err.to_dict()
         except DBAPIError as err:
             return DatabaseError(str(err.orig or err)).to_dict()
-

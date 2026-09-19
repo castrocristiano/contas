@@ -128,16 +128,17 @@ O servidor expõe as seguintes ferramentas em conformidade com o protocolo MCP:
 
 - `create_account`: Cria uma nova conta financeira com saldo inicial.
 - `list_accounts`: Lista todas as contas com saldo atual e soma consolidada.
-- `record_transaction`: Registra receita, despesa ou transferência atualizando saldos atomicamente.
-- `get_statement`: Retorna o extrato detalhado de uma conta em determinado período com resumo.
+- `record_transaction`: Registra receita, despesa, transferência ou compra parcelada (com projeção automática de parcelas futuras).
+- `get_statement`: Retorna o extrato detalhado de uma conta em determinado período com resumo e metadados de parcelas.
 - `get_financial_summary`: Consolida patrimônio total de todas as contas ativas.
 - `create_category`: Cria uma nova categoria de receitas ou despesas.
 - `list_categories`: Lista categorias cadastradas com filtros opcionais por tipo e status.
 - `set_budget`: Define ou atualiza o teto orçamentário mensal para uma categoria de despesa.
 - `get_budget_status`: Consulta o status de execução orçamentária e consumo por período.
+- `get_installment_plan`: Consulta o plano detalhado de uma compra parcelada, progresso de quitação e parcelas futuras.
 - `health_check`: Verifica o status operacional do servidor MCP e conexão com PostgreSQL.
 
-Para detalhes de schemas de entrada e saída, consulte os contratos em [001-core-infra-mcp](specs/001-core-infra-mcp/contracts/mcp-tools.md) e [002-categories-and-budgets](specs/002-categories-and-budgets/contracts/mcp-tools.md).
+Para detalhes de schemas de entrada e saída, consulte os contratos em [001-core-infra-mcp](specs/001-core-infra-mcp/contracts/mcp-tools.md), [002-categories-and-budgets](specs/002-categories-and-budgets/contracts/mcp-tools.md) e [003-installment-purchases](specs/003-installment-purchases/spec.md).
 
 ---
 

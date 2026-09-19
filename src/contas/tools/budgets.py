@@ -1,8 +1,10 @@
 import calendar
 from datetime import UTC, datetime
 from decimal import Decimal
+
 from mcp.server.mcpserver import MCPServer
-from sqlalchemy.exc import DBAPIError, IntegrityError as SAIntegrityError
+from sqlalchemy.exc import DBAPIError
+from sqlalchemy.exc import IntegrityError as SAIntegrityError
 from sqlmodel import select
 
 from contas.db.session import get_session
@@ -106,7 +108,9 @@ def register_budget_tools(mcp: MCPServer) -> None:
 
             _, last_day = calendar.monthrange(target_year, target_month)
             start_date = datetime(target_year, target_month, 1, 0, 0, 0, tzinfo=UTC)
-            end_date = datetime(target_year, target_month, last_day, 23, 59, 59, 999999, tzinfo=UTC)
+            end_date = datetime(
+                target_year, target_month, last_day, 23, 59, 59, 999999, tzinfo=UTC
+            )
 
             async with get_session() as session:
                 budget_query = select(Budget).where(
@@ -114,7 +118,9 @@ def register_budget_tools(mcp: MCPServer) -> None:
                     Budget.year == target_year,
                 )
                 if payload.category_id is not None:
-                    budget_query = budget_query.where(Budget.category_id == payload.category_id)
+                    budget_query = budget_query.where(
+                        Budget.category_id == payload.category_id
+                    )
 
                 budgets = (await session.exec(budget_query)).all()
 
@@ -137,7 +143,9 @@ def register_budget_tools(mcp: MCPServer) -> None:
                     Transaction.transaction_date <= end_date,
                 )
                 if payload.category_id is not None:
-                    tx_query = tx_query.where(Transaction.category_id == payload.category_id)
+                    tx_query = tx_query.where(
+                        Transaction.category_id == payload.category_id
+                    )
                 elif cat_ids:
                     tx_query = tx_query.where(Transaction.category_id.in_(cat_ids))
                 else:
@@ -148,7 +156,9 @@ def register_budget_tools(mcp: MCPServer) -> None:
             spent_by_cat: dict = {}
             for tx in transactions:
                 if tx.category_id:
-                    spent_by_cat[tx.category_id] = spent_by_cat.get(tx.category_id, Decimal("0.00")) + tx.amount
+                    spent_by_cat[tx.category_id] = (
+                        spent_by_cat.get(tx.category_id, Decimal("0.00")) + tx.amount
+                    )
 
             items: list[BudgetItemStatus] = []
             total_budgeted = Decimal("0.00")
@@ -159,7 +169,11 @@ def register_budget_tools(mcp: MCPServer) -> None:
                 cat_name = cat.name if cat else "Desconhecida"
                 spent = spent_by_cat.get(b.category_id, Decimal("0.00"))
                 remaining = b.amount - spent
-                spent_pct = (spent / b.amount) * Decimal("100") if b.amount > Decimal("0.00") else Decimal("0.00")
+                spent_pct = (
+                    (spent / b.amount) * Decimal(100)
+                    if b.amount > Decimal("0.00")
+                    else Decimal("0.00")
+                )
                 is_exceeded = spent > b.amount
 
                 total_budgeted += b.amount
@@ -179,7 +193,7 @@ def register_budget_tools(mcp: MCPServer) -> None:
 
             total_remaining = total_budgeted - total_spent
             overall_pct = (
-                (total_spent / total_budgeted) * Decimal("100")
+                (total_spent / total_budgeted) * Decimal(100)
                 if total_budgeted > Decimal("0.00")
                 else Decimal("0.00")
             )
@@ -199,4 +213,3 @@ def register_budget_tools(mcp: MCPServer) -> None:
             return err.to_dict()
         except DBAPIError as err:
             return DatabaseError(str(err.orig or err)).to_dict()
-

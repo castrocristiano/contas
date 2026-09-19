@@ -64,6 +64,15 @@ class TransferSameAccountError(ContasError):
         )
 
 
+class InstallmentPlanNotFoundError(ContasError):
+    def __init__(self, installment_id: str) -> None:
+        super().__init__(
+            code="INSTALLMENT_PLAN_NOT_FOUND",
+            message=f"Installment plan with ID '{installment_id}' was not found.",
+            details={"installment_id": installment_id},
+        )
+
+
 class DatabaseError(ContasError):
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(code="DATABASE_ERROR", message=message, details=details)
