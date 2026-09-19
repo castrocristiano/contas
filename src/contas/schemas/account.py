@@ -40,3 +40,32 @@ class AccountResponse(BaseModel):
     currency: str
     is_active: bool
     created_at: datetime
+
+
+class AccountSummary(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    name: str
+    account_type: AccountType
+    balance: str
+    currency: str
+    is_active: bool
+
+
+class ListAccountsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    include_inactive: bool = Field(
+        default=False,
+        description="If true, also returns inactive accounts. Default: false.",
+    )
+
+
+class ListAccountsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    accounts: list[AccountSummary]
+    total_balance: str
+    currency: str
+    count: int

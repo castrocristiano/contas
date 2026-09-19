@@ -77,14 +77,14 @@
 
 ### Schemas
 
-- [ ] T026 [P] [US2] Adicionar a `src/contas/schemas/account.py`: `ListAccountsInput(BaseModel)` com `include_inactive: bool = False`; `ListAccountsResponse` com `accounts: list[AccountSummary]`, `total_balance: str`, `currency: str`, `count: int`
-- [ ] T027 [P] [US2] Adicionar a `src/contas/schemas/transaction.py`: `GetStatementInput(BaseModel)` com `account_id: str`, `start_date: str`, `end_date: str`, `include_pending: bool = False`, `limit: int` (default=50, ge=1, le=500); `model_validator` garantindo `start_date <= end_date`; `GetFinancialSummaryInput(BaseModel)` com `reference_date: str | None = None`
+- [x] T026 [P] [US2] Adicionar a `src/contas/schemas/account.py`: `ListAccountsInput(BaseModel)` com `include_inactive: bool = False`; `ListAccountsResponse` com `accounts: list[AccountSummary]`, `total_balance: str`, `currency: str`, `count: int`
+- [x] T027 [P] [US2] Adicionar a `src/contas/schemas/transaction.py`: `GetStatementInput(BaseModel)` com `account_id: str`, `start_date: str`, `end_date: str`, `include_pending: bool = False`, `limit: int` (default=50, ge=1, le=500); `model_validator` garantindo `start_date <= end_date`; `GetFinancialSummaryInput(BaseModel)` com `reference_date: str | None = None`
 
 ### Implementação
 
-- [ ] T028 [US2] Adicionar tool `list_accounts(payload: ListAccountsInput)` em `src/contas/tools/accounts.py`: query `SELECT * FROM account WHERE is_active=True` (ou incluindo inativos), calcula `total_balance` somando via `Decimal`, retorna `ListAccountsResponse`
-- [ ] T029 [US2] Adicionar tool `get_statement(payload: GetStatementInput)` em `src/contas/tools/transactions.py`: valida existência da conta, converte `start_date`/`end_date` para `datetime` com timezone, query `Transaction` filtrada por `source_account_id`, período e (opcionalmente) status, ordenada por `transaction_date ASC`, aplica `limit`, calcula `summary` (total_income, total_expense, net) via `Decimal`, retorna resposta — ver [contracts/mcp-tools.md](./contracts/mcp-tools.md)
-- [ ] T030 [US2] Adicionar tool `get_financial_summary(payload: GetFinancialSummaryInput)` em `src/contas/tools/transactions.py`: lista todas contas ativas com saldos, calcula `total_assets` via `Decimal`, retorna resposta consolidada
+- [x] T028 [US2] Adicionar tool `list_accounts(payload: ListAccountsInput)` em `src/contas/tools/accounts.py`: query `SELECT * FROM account WHERE is_active=True` (ou incluindo inativos), calcula `total_balance` somando via `Decimal`, retorna `ListAccountsResponse`
+- [x] T029 [US2] Adicionar tool `get_statement(payload: GetStatementInput)` em `src/contas/tools/transactions.py`: valida existência da conta, converte `start_date`/`end_date` para `datetime` com timezone, query `Transaction` filtrada por `source_account_id`, período e (opcionalmente) status, ordenada por `transaction_date ASC`, aplica `limit`, calcula `summary` (total_income, total_expense, net) via `Decimal`, retorna resposta — ver [contracts/mcp-tools.md](./contracts/mcp-tools.md)
+- [x] T030 [US2] Adicionar tool `get_financial_summary(payload: GetFinancialSummaryInput)` em `src/contas/tools/transactions.py`: lista todas contas ativas com saldos, calcula `total_assets` via `Decimal`, retorna resposta consolidada
 
 **Checkpoint**: `list_accounts` retorna contas com `total_balance` correto. `get_statement` retorna extrato ordenado com `summary` preciso. `get_financial_summary` consolida patrimônio total.
 

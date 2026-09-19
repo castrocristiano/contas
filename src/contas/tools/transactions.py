@@ -7,11 +7,20 @@ from sqlmodel import select
 from contas.db.session import get_session
 from contas.models.account import Account
 from contas.models.category import Category
-from contas.models.transaction import Transaction, TransactionType
+from contas.models.transaction import Transaction, TransactionStatus, TransactionType
 from contas.schemas.transaction import (
+    FinancialSummaryAccountItem,
+    FinancialSummaryResponse,
+    GetFinancialSummaryInput,
+    GetStatementInput,
     RecordTransactionInput,
     RecordTransactionResponse,
     SourceAccountSummary,
+    StatementAccountHeader,
+    StatementItem,
+    StatementPeriod,
+    StatementResponse,
+    StatementSummary,
 )
 
 
@@ -117,5 +126,124 @@ def register_transaction_tools(mcp: MCPServer) -> None:
             ),
             category_id=transaction.category_id,
             created_at=transaction.created_at,
+        )
+        return response.model_dump(mode="json")
+
+    @mcp.tool()
+    async def get_statement(payload: GetStatementInput) -> dict:
+        """Get the detailed statement of an account for a given period."""
+        s_date = datetime.fromisoformat(payload.start_date)
+        e_date = datetime.fromisoformat(payload.end_date)
+
+        async with get_session() as session:
+            account = (
+                await session.exec(
+                    select(Account).where(Account.id == payload.account_id)
+                )
+            ).first()
+            if not account:
+                raise ValueError(
+                    f"Account with ID '{payload.account_id}' was not found."
+                )
+
+            query = select(Transaction).where(
+                Transaction.source_account_id == payload.account_id,
+                Transaction.transaction_date >= s_date,
+                Transaction.transaction_date <= e_date,
+            )
+            if not payload.include_pending:
+                query = query.where(Transaction.status == TransactionStatus.CLEARED)
+
+            query = query.order_by(Transaction.transaction_date.asc()).limit(
+                payload.limit
+            )
+            transactions = (await session.exec(query)).all()
+
+            total_income = Decimal("0.00")
+            total_expense = Decimal("0.00")
+            items: list[StatementItem] = []
+
+            for tx in transactions:
+                if tx.transaction_type == TransactionType.INCOME:
+                    total_income += tx.amount
+                elif tx.transaction_type in (
+                    TransactionType.EXPENSE,
+                    TransactionType.TRANSFER,
+                ):
+                    total_expense += tx.amount
+
+                category_name = None
+                if tx.category_id:
+                    cat = (
+                        await session.exec(
+                            select(Category).where(Category.id == tx.category_id)
+                        )
+                    ).first()
+                    if cat:
+                        category_name = cat.name
+
+                items.append(
+                    StatementItem(
+                        id=tx.id,
+                        transaction_date=tx.transaction_date,
+                        description=tx.description,
+                        amount=f"{tx.amount:.2f}",
+                        transaction_type=tx.transaction_type,
+                        status=tx.status,
+                        category=category_name,
+                    )
+                )
+
+            net = total_income - total_expense
+
+            response = StatementResponse(
+                account=StatementAccountHeader(
+                    id=account.id,
+                    name=account.name,
+                    current_balance=f"{account.balance:.2f}",
+                ),
+                period=StatementPeriod(
+                    start=payload.start_date,
+                    end=payload.end_date,
+                ),
+                transactions=items,
+                summary=StatementSummary(
+                    total_income=f"{total_income:.2f}",
+                    total_expense=f"{total_expense:.2f}",
+                    net=f"{net:.2f}",
+                    count=len(items),
+                ),
+            )
+            return response.model_dump(mode="json")
+
+    @mcp.tool()
+    async def get_financial_summary(payload: GetFinancialSummaryInput) -> dict:
+        """Get consolidated financial summary of all active accounts."""
+        ref_date = payload.reference_date or datetime.now(UTC).date().isoformat()
+
+        async with get_session() as session:
+            accounts = (
+                await session.exec(select(Account).where(Account.is_active == True))
+            ).all()
+
+        total = sum((acc.balance for acc in accounts), Decimal("0.00"))
+        currency = accounts[0].currency if accounts else "BRL"
+
+        account_items = [
+            FinancialSummaryAccountItem(
+                id=acc.id,
+                name=acc.name,
+                account_type=acc.account_type,
+                balance=f"{acc.balance:.2f}",
+                currency=acc.currency,
+            )
+            for acc in accounts
+        ]
+
+        response = FinancialSummaryResponse(
+            reference_date=ref_date,
+            accounts=account_items,
+            total_assets=f"{total:.2f}",
+            currency=currency,
         )
         return response.model_dump(mode="json")

@@ -107,3 +107,73 @@ def test_record_transaction_input_transfer_rejects_same_account():
             source_account_id=same_id,
             destination_account_id=same_id,
         )
+
+
+def test_list_accounts_input_default():
+    from contas.schemas.account import ListAccountsInput
+
+    payload = ListAccountsInput()
+    assert payload.include_inactive is False
+
+
+def test_get_statement_input_valid():
+    from contas.schemas.transaction import GetStatementInput
+
+    payload = GetStatementInput(
+        account_id=uuid4(),
+        start_date="2026-09-01",
+        end_date="2026-09-30",
+    )
+    assert payload.limit == 50
+    assert payload.include_pending is False
+
+
+def test_get_statement_input_rejects_start_date_after_end_date():
+    from contas.schemas.transaction import GetStatementInput
+
+    with pytest.raises(
+        ValidationError, match="start_date must be less than or equal to end_date"
+    ):
+        GetStatementInput(
+            account_id=uuid4(),
+            start_date="2026-09-30",
+            end_date="2026-09-01",
+        )
+
+
+def test_get_statement_input_rejects_invalid_date_format():
+    from contas.schemas.transaction import GetStatementInput
+
+    with pytest.raises(ValidationError, match="valid ISO 8601"):
+        GetStatementInput(
+            account_id=uuid4(),
+            start_date="not-a-date",
+            end_date="2026-09-30",
+        )
+
+
+def test_get_statement_input_limit_bounds():
+    from contas.schemas.transaction import GetStatementInput
+
+    with pytest.raises(ValidationError):
+        GetStatementInput(
+            account_id=uuid4(),
+            start_date="2026-09-01",
+            end_date="2026-09-30",
+            limit=0,
+        )
+
+    with pytest.raises(ValidationError):
+        GetStatementInput(
+            account_id=uuid4(),
+            start_date="2026-09-01",
+            end_date="2026-09-30",
+            limit=501,
+        )
+
+
+def test_get_financial_summary_input_default():
+    from contas.schemas.transaction import GetFinancialSummaryInput
+
+    payload = GetFinancialSummaryInput()
+    assert payload.reference_date is None
