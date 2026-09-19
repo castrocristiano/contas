@@ -1,50 +1,64 @@
-# [PROJECT_NAME] Constitution
-<!-- Example: Spec Constitution, TaskFlow Constitution, etc. -->
+<!--
+Sync Impact Report
+Version change: unratified -> 1.0.0
+Modified principles:
+  - [PRINCIPLE_1_NAME] -> I. Simplicidade e YAGNI (Non-Negotiable)
+  - [PRINCIPLE_2_NAME] -> II. Integridade e Precisão Financeira
+  - [PRINCIPLE_3_NAME] -> III. Interface MCP Declarativa e Autônoma
+  - [PRINCIPLE_4_NAME] -> IV. Integração com IA Segura e Estruturada
+  - [PRINCIPLE_5_NAME] -> V. Conteinerização e Portabilidade com Podman
+Added sections:
+  - Stack Tecnológica e Restrições de Arquitetura
+  - Fluxo de Desenvolvimento e Qualidade
+Removed sections:
+  - None
+Follow-up TODOs:
+  - None
+-->
+
+# Contas Constitution
 
 ## Core Principles
 
-### [PRINCIPLE_1_NAME]
-<!-- Example: I. Library-First -->
-[PRINCIPLE_1_DESCRIPTION]
-<!-- Example: Every feature starts as a standalone library; Libraries must be self-contained, independently testable, documented; Clear purpose required - no organizational-only libraries -->
+### I. Simplicidade e YAGNI (Non-Negotiable)
+Todo código, estrutura de dados e abstração arquitetural DEVEM atender a uma necessidade imediata e concreta do controle financeiro. É terminantemente proibido introduzir abstrações prematuras, camadas desnecessárias de indireção ou padrões de design complexos para cenários futuros hipotéticos. O sistema deve ser mantido enxuto, compreensível e fácil de manter.
 
-### [PRINCIPLE_2_NAME]
-<!-- Example: II. CLI Interface -->
-[PRINCIPLE_2_DESCRIPTION]
-<!-- Example: Every library exposes functionality via CLI; Text in/out protocol: stdin/args → stdout, errors → stderr; Support JSON + human-readable formats -->
+### II. Integridade e Precisão Financeira
+Valores monetários NUNCA devem ser representados por tipos de ponto flutuante binário (`float`). Todas as operações financeiras DEVEM utilizar representação decimal exata (`Decimal`) ou valores inteiros em centavos. Toda transação financeira DEVE conter data, descrição, valor, categoria, conta de origem/destino e status de liquidação com rastreabilidade explícita.
 
-### [PRINCIPLE_3_NAME]
-<!-- Example: III. Test-First (NON-NEGOTIABLE) -->
-[PRINCIPLE_3_DESCRIPTION]
-<!-- Example: TDD mandatory: Tests written → User approved → Tests fail → Then implement; Red-Green-Refactor cycle strictly enforced -->
+### III. Interface MCP Declarativa e Autônoma
+A manipulação dos dados financeiros deve ser exposta primariamente através do Model Context Protocol (MCP). As ferramentas (tools) e recursos (resources) MCP DEVEM ser declarativos, com schemas estritos validados via Pydantic e mensagens de erro informativas. Isso assegura que agentes e modelos de linguagem possam consultar saldos, registrar gastos e gerar relatórios de forma determinística e segura.
 
-### [PRINCIPLE_4_NAME]
-<!-- Example: IV. Integration Testing -->
-[PRINCIPLE_4_DESCRIPTION]
-<!-- Example: Focus areas requiring integration tests: New library contract tests, Contract changes, Inter-service communication, Shared schemas -->
+### IV. Integração com IA Segura e Estruturada
+Toda comunicação com a API da OpenAI (para categorização de despesas, extração de texto de comprovantes ou geração de insights) DEVE utilizar saídas estruturadas estritas (Structured Outputs / JSON Schema). A inteligência artificial não deve persistir dados diretamente no banco sem que passem pelas regras de validação de schema e integridade da aplicação.
 
-### [PRINCIPLE_5_NAME]
-<!-- Example: V. Observability, VI. Versioning & Breaking Changes, VII. Simplicity -->
-[PRINCIPLE_5_DESCRIPTION]
-<!-- Example: Text I/O ensures debuggability; Structured logging required; Or: MAJOR.MINOR.BUILD format; Or: Start simple, YAGNI principles -->
+### V. Conteinerização e Portabilidade com Podman
+O sistema e seus serviços de suporte (servidor de aplicação/MCP e banco PostgreSQL) DEVEM ser completamente reproduzíveis e executáveis em containers utilizando `podman-compose` em modo rootless. Variáveis de ambiente e credenciais sensíveis (chaves da OpenAI, senhas de banco) NUNCA devem estar versionadas no código, devendo ser injetadas exclusivamente via arquivos de ambiente (`.env`).
 
-## [SECTION_2_NAME]
-<!-- Example: Additional Constraints, Security Requirements, Performance Standards, etc. -->
+## Stack Tecnológica e Restrições de Arquitetura
 
-[SECTION_2_CONTENT]
-<!-- Example: Technology stack requirements, compliance standards, deployment policies, etc. -->
+- **Linguagem e Runtime**: Python 3.12+ gerenciado pelo `uv`.
+- **Servidor MCP e API**: Python MCP SDK oficial e Pydantic v2 para validação de dados.
+- **Banco de Dados**: PostgreSQL 16+ gerenciado via `podman-compose`, com migrações de schema versionadas (Alembic / SQLModel / SQLAlchemy).
+- **Provedor de LLM**: OpenAI API com integração direta usando `pydantic` para schemas de resposta.
+- **Execução e Orquestração**: Podman e `podman-compose` com persistência de dados em volumes dedicados.
 
-## [SECTION_3_NAME]
-<!-- Example: Development Workflow, Review Process, Quality Gates, etc. -->
+## Fluxo de Desenvolvimento e Qualidade
 
-[SECTION_3_CONTENT]
-<!-- Example: Code review requirements, testing gates, deployment approval process, etc. -->
+- **Gestão de Dependências**: Todas as adições ou alterações de bibliotecas DEVEM ser executadas exclusivamente via `uv add` ou `uv lock`.
+- **Qualidade de Código e Formatação**: O código deve passar pelas regras de validação do `ruff` (linter e formatador).
+- **Testes Automatizados**: Implementações de regras de cálculo, filtros de transações e ferramentas MCP DEVEM ser acompanhadas de testes automatizados com `pytest`.
+- **Especificação Prévia**: Nenhuma funcionalidade significativa deve ser implementada sem especificação prévia via Spec Kit (`/speckit-specify` e `/speckit-plan`).
 
 ## Governance
-<!-- Example: Constitution supersedes all other practices; Amendments require documentation, approval, migration plan -->
 
-[GOVERNANCE_RULES]
-<!-- Example: All PRs/reviews must verify compliance; Complexity must be justified; Use [GUIDANCE_FILE] for runtime development guidance -->
+A presente Constituição define a governança técnica e os princípios inegociáveis do projeto **Contas**. Todas as especificações, planos de implementação e revisões de código DEVEM obedecer rigorosamente a estas diretrizes.
 
-**Version**: [CONSTITUTION_VERSION] | **Ratified**: [RATIFICATION_DATE] | **Last Amended**: [LAST_AMENDED_DATE]
-<!-- Example: Version: 2.1.1 | Ratified: 2025-06-13 | Last Amended: 2025-07-16 -->
+- **Processo de Emenda**: Qualquer alteração, inclusão ou remoção de princípios requer justificativa explícita e atualização deste documento.
+- **Versionamento Semântico da Constituição**:
+  - **MAJOR**: Alterações ou remoções incompatíveis de princípios existentes.
+  - **MINOR**: Inclusão de novos princípios ou diretrizes substanciais.
+  - **PATCH**: Correções de texto, formatação e esclarecimentos semânticos.
+- **Revisão de Conformidade**: Todas as tarefas executadas pelo Spec Kit devem validar conformidade com estes princípios antes da conclusão.
+
+**Version**: 1.0.0 | **Ratified**: 2026-09-19 | **Last Amended**: 2026-09-19
