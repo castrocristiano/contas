@@ -1,15 +1,10 @@
 <!--
 Sync Impact Report
-Version change: unratified -> 1.0.0
+Version change: 1.0.0 -> 1.1.0
 Modified principles:
-  - [PRINCIPLE_1_NAME] -> I. Simplicidade e YAGNI (Non-Negotiable)
-  - [PRINCIPLE_2_NAME] -> II. Integridade e Precisão Financeira
-  - [PRINCIPLE_3_NAME] -> III. Interface MCP Declarativa e Autônoma
-  - [PRINCIPLE_4_NAME] -> IV. Integração com IA Segura e Estruturada
-  - [PRINCIPLE_5_NAME] -> V. Conteinerização e Portabilidade com Podman
+  - None
 Added sections:
-  - Stack Tecnológica e Restrições de Arquitetura
-  - Fluxo de Desenvolvimento e Qualidade
+  - Principle VI: Idioma Oficial do Projeto (PT-BR)
 Removed sections:
   - None
 Follow-up TODOs:
@@ -34,6 +29,9 @@ Toda comunicação com a API da OpenAI (para categorização de despesas, extra�
 
 ### V. Conteinerização e Portabilidade com Podman
 O sistema e seus serviços de suporte (servidor de aplicação/MCP e banco PostgreSQL) DEVEM ser completamente reproduzíveis e executáveis em containers utilizando `podman-compose` em modo rootless. Variáveis de ambiente e credenciais sensíveis (chaves da OpenAI, senhas de banco) NUNCA devem estar versionadas no código, devendo ser injetadas exclusivamente via arquivos de ambiente (`.env`).
+
+### VI. Idioma Oficial do Projeto (PT-BR)
+Toda a documentação, especificações de funcionalidades (`spec.md`), planos técnicos (`plan.md`), listas de tarefas (`tasks.md`), checklists, mensagens de commit e diálogos com o usuário DEVEM ser expressos em Português do Brasil (PT-BR). As entidades de domínio de negócio (ex: `Conta`, `Transacao`, `Categoria`) devem ser nomeadas preferencialmente em português, mantendo o padrão técnico da stack para bibliotecas e sintaxe da linguagem.
 
 ## Stack Tecnológica e Restrições de Arquitetura
 
@@ -61,4 +59,4 @@ A presente Constituição define a governança técnica e os princípios inegoci
   - **PATCH**: Correções de texto, formatação e esclarecimentos semânticos.
 - **Revisão de Conformidade**: Todas as tarefas executadas pelo Spec Kit devem validar conformidade com estes princípios antes da conclusão.
 
-**Version**: 1.0.0 | **Ratified**: 2026-09-19 | **Last Amended**: 2026-09-19
+**Version**: 1.1.0 | **Ratified**: 2026-09-19 | **Last Amended**: 2026-09-19
