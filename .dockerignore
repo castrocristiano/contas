@@ -1,0 +1,36 @@
+# Dockerfile
+Dockerfile
+.dockerignore
+
+# Git
+.git/
+.gitignore
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.venv/
+*.egg-info/
+
+# Tests
+tests/
+.pytest_cache/
+.coverage
+
+# Docs and specs
+specs/
+*.md
+LICENSE
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Dev tools
+.ruff_cache/
+uv.lock
+
+# Migrations (included — needed at runtime)
+# migrations/

@@ -30,11 +30,19 @@ from mcp.server.mcpserver import MCPServer
 
 mcp = MCPServer("contas-server")
 
+
 @mcp.tool()
 async def create_account(
-    name: Annotated[str, Field(description="Display name of the account", min_length=1, max_length=100)],
-    account_type: Annotated[str, Field(description="Type: checking, savings, investment, cash")],
-    initial_balance: Annotated[str, Field(default="0.00", description="Opening balance as decimal string")] = "0.00",
+    name: Annotated[
+        str,
+        Field(description="Display name of the account", min_length=1, max_length=100),
+    ],
+    account_type: Annotated[
+        str, Field(description="Type: checking, savings, investment, cash")
+    ],
+    initial_balance: Annotated[
+        str, Field(default="0.00", description="Opening balance as decimal string")
+    ] = "0.00",
 ) -> dict:
     """Create a new financial account."""
     ...
@@ -46,13 +54,19 @@ async def create_account(
 from pydantic import BaseModel, Field, ConfigDict
 from mcp.server.mcpserver import MCPServer
 
+
 class CreateAccountInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     name: str = Field(description="Display name", min_length=1, max_length=100)
     account_type: str = Field(description="Type: checking, savings, investment, cash")
-    initial_balance: str = Field(default="0.00", description="Opening balance as decimal string")
-    currency: str = Field(default="BRL", description="ISO 4217 code", pattern=r"^[A-Z]{3}$")
+    initial_balance: str = Field(
+        default="0.00", description="Opening balance as decimal string"
+    )
+    currency: str = Field(
+        default="BRL", description="ISO 4217 code", pattern=r"^[A-Z]{3}$"
+    )
+
 
 @mcp.tool()
 async def create_account(payload: CreateAccountInput) -> dict:
@@ -95,6 +109,7 @@ def register_account_tools(mcp: MCPServer) -> None:
 
     @mcp.tool()
     async def list_accounts(payload: ListAccountsInput) -> dict: ...
+
 
 # server.py
 def create_server() -> MCPServer:
