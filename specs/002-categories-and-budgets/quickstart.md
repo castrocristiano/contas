@@ -76,4 +76,3 @@ uv run alembic upgrade head
    - `remaining_balance: "450.00"`
    - `spent_percentage: "25.00"`
    - `is_exceeded: false`
-

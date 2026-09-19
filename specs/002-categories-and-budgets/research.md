@@ -48,4 +48,3 @@ Seguindo as convenções e contratos estabelecidos na feature `001`, as ferramen
 2. `list_categories`: Lista categorias ativas com filtros opcionais (`category_type`, `include_inactive`).
 3. `set_budget`: Cria ou atualiza o teto orçamentário de uma categoria para um determinado mês/ano.
 4. `get_budget_status`: Consulta o acompanhamento de um orçamento específico ou de todos os orçamentos do mês.
-

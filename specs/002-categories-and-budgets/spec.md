@@ -108,4 +108,3 @@ Para que eu saiba quanto já gastei, quanto ainda tenho disponível e se ultrapa
 - O controle orçamentário se aplica primariamente a despesas (`expense`), visto que receitas representam entradas e não tetos limitadores de gasto.
 - A autenticação e segurança seguem o mesmo modelo do servidor MCP configurado na feature `001-core-infra-mcp`.
 - O banco de dados PostgreSQL 16 provisionado via Podman continuará sendo a fonte primária de persistência.
-
