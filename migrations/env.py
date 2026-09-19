@@ -12,13 +12,14 @@ from sqlmodel import SQLModel
 
 # Import all models so SQLModel.metadata is fully populated before autogenerate.
 # New models must be imported here to be detected by Alembic.
+from contas.config import settings
 from contas.models import Account, Category, Transaction  # noqa: F401
 
 # Alembic Config object — provides access to the .ini file values.
 config = context.config
 
-# Override sqlalchemy.url from environment variable when present.
-database_url = os.getenv("DATABASE_URL")
+# Override sqlalchemy.url from environment variable or settings.
+database_url = os.getenv("DATABASE_URL") or settings.database_url
 if database_url:
     config.set_main_option("sqlalchemy.url", database_url)
 
