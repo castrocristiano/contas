@@ -1,0 +1,8 @@
+# CODEOWNERS — Define os aprovadores obrigatórios para cada parte do repositório.
+# Qualquer Pull Request para a branch main requer aprovação de @castrocristiano.
+#
+# Formato: <padrão de arquivo>   <@usuario ou @org/equipe>
+# O padrão "*" cobre todos os arquivos do repositório.
+
+*   @castrocristiano
+
