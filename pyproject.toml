@@ -1,13 +1,21 @@
 [project]
 name = "contas"
 version = "0.1.0"
-description = "Add your description here"
+description = "Sistema de gestão financeira doméstica com suporte a MCP e OpenAI"
 readme = "README.md"
 authors = [
-    { name = "Cristiano", email = "cristiano@local" }
+    { name = "Cristiano Castro", email = "cscastro87@gmail.com" }
 ]
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "alembic>=1.13",
+    "mcp[cli]>=2.2.0",
+    "openai>=1.0",
+    "psycopg[binary]>=3.1",
+    "pydantic>=2.0",
+    "python-dotenv>=1.0",
+    "sqlmodel>=0.0.21",
+]
 
 [project.scripts]
 contas = "contas:main"
