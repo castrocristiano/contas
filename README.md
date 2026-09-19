@@ -101,3 +101,4 @@ O desenvolvimento de novas funcionalidades segue o ciclo do **Spec-Driven Develo
 ## 📄 Licença
 
 Este projeto é distribuído sob a licença **GNU General Public License v3.0** (GPL-3.0). Consulte o arquivo [LICENSE](LICENSE) para mais detalhes.
+
