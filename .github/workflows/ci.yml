@@ -67,13 +67,6 @@ jobs:
               --base main \
               --head develop \
               --title "chore: merge develop into main" \
-              --body "### Pull Request Automatizado
-
-Este PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch \`develop\`.
-
-#### Verificações Realizadas
-- [x] Resolução de dependências com \`uv\`
-- [x] Linter e validação de formatação com \`ruff\`
-- [x] Execução de testes unitários com \`pytest\`"
+              --body $'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch \`develop\`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com \`uv\`\n- [x] Linter e validação de formatação com \`ruff\`\n- [x] Execução de testes unitários com \`pytest\`'
           fi
 
