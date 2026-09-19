@@ -44,3 +44,4 @@ def test_list_categories_input_filter():
     )
     assert payload.category_type == CategoryType.INCOME
     assert payload.include_inactive is True
+

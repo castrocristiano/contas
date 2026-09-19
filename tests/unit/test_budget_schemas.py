@@ -71,3 +71,4 @@ def test_set_budget_input_extra_fields_forbidden():
             year=2026,
             extra="forbidden",
         )
+

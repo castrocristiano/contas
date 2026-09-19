@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 class Budget(SQLModel, table=True):
     __tablename__ = "budget"
     __table_args__ = (
-        UniqueConstraint(
-            "category_id", "month", "year", name="uq_budget_category_period"
-        ),
+        UniqueConstraint("category_id", "month", "year", name="uq_budget_category_period"),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
@@ -39,3 +37,4 @@ class Budget(SQLModel, table=True):
     )
 
     category: "Category" = Relationship(back_populates="budgets")
+

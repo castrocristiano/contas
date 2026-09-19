@@ -47,3 +47,4 @@ class ListCategoriesResponse(BaseModel):
 
     categories: list[CategoryResponse]
     count: int
+

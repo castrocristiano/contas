@@ -71,3 +71,4 @@ erDiagram
     Category ||--o{ Budget : "possui"
     Category ||--o{ Transaction : "classifica"
 ```
+

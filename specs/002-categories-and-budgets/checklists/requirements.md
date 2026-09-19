@@ -32,3 +32,4 @@
 ## Notes
 
 - Especificação pronta para avanço à fase de planejamento técnico (`/speckit-plan`).
+
