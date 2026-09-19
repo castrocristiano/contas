@@ -6,6 +6,7 @@ on:
       - develop
       - main
       - 'phase/**'
+      - 'feature/**'
   pull_request:
     branches:
       - develop
@@ -19,6 +20,21 @@ jobs:
   build-and-test:
     name: Build & Test
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: contas
+          POSTGRES_USER: contas
+          POSTGRES_PASSWORD: contas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -41,14 +57,21 @@ jobs:
       - name: Run Ruff Formatter Check
         run: uv run ruff format --check .
 
-      - name: Run Unit Tests
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
+        run: uv run alembic upgrade head
+
+      - name: Run Unit & Integration Tests
+        env:
+          DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
         run: uv run pytest -v
 
-  # Abre PR de branch de fase → develop (após build bem-sucedido)
+  # Abre PR de branch de fase ou feature → develop (após build bem-sucedido)
   auto-pr-to-develop:
     name: Open PR to develop
     needs: build-and-test
-    if: github.event_name == 'push' && startsWith(github.ref, 'refs/heads/phase/')
+    if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/phase/') || startsWith(github.ref, 'refs/heads/feature/'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -70,7 +93,7 @@ jobs:
               --base develop \
               --head "$BRANCH" \
               --title "feat: $BRANCH" \
-              --body $'### Pull Request de Fase\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
+              --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
           fi
 
   # Abre PR de develop → main (após build bem-sucedido)
