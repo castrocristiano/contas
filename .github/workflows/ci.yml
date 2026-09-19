@@ -76,3 +76,4 @@ Este PR foi aberto automaticamente pela esteira de CI após a conclusão bem-suc
 - [x] Linter e validação de formatação com \`ruff\`
 - [x] Execução de testes unitários com \`pytest\`"
           fi
+
