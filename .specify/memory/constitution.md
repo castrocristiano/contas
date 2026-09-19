@@ -1,10 +1,10 @@
 <!--
 Sync Impact Report
-Version change: 1.0.0 -> 1.1.0
+Version change: 1.1.0 -> 1.1.1
 Modified principles:
-  - None
+  - Principle VI: Clarified that all source code, models, schemas, and tests MUST be written in English (EN-US), while documentation, specs, plans, and user interaction are in Brazilian Portuguese (PT-BR).
 Added sections:
-  - Principle VI: Idioma Oficial do Projeto (PT-BR)
+  - None
 Removed sections:
   - None
 Follow-up TODOs:
@@ -30,8 +30,9 @@ Toda comunicação com a API da OpenAI (para categorização de despesas, extra�
 ### V. Conteinerização e Portabilidade com Podman
 O sistema e seus serviços de suporte (servidor de aplicação/MCP e banco PostgreSQL) DEVEM ser completamente reproduzíveis e executáveis em containers utilizando `podman-compose` em modo rootless. Variáveis de ambiente e credenciais sensíveis (chaves da OpenAI, senhas de banco) NUNCA devem estar versionadas no código, devendo ser injetadas exclusivamente via arquivos de ambiente (`.env`).
 
-### VI. Idioma Oficial do Projeto (PT-BR)
-Toda a documentação, especificações de funcionalidades (`spec.md`), planos técnicos (`plan.md`), listas de tarefas (`tasks.md`), checklists, mensagens de commit e diálogos com o usuário DEVEM ser expressos em Português do Brasil (PT-BR). As entidades de domínio de negócio (ex: `Conta`, `Transacao`, `Categoria`) devem ser nomeadas preferencialmente em português, mantendo o padrão técnico da stack para bibliotecas e sintaxe da linguagem.
+### VI. Idioma: Documentação em PT-BR e Código-Fonte em EN-US
+- **Documentação e Interação**: Todas as especificações de funcionalidades (`spec.md`), planos técnicos (`plan.md`), listas de tarefas (`tasks.md`), checklists, documentações e comunicação com o usuário DEVEM ser expressos em **Português do Brasil (PT-BR)**.
+- **Código-Fonte em Inglês**: Todo o código-fonte executável (arquivos `.py`, classes, funções, variáveis, schemas Pydantic, tabelas e colunas no banco de dados, comentários de código e testes automatizados) DEVE ser escrito exclusivamente em **Inglês (EN-US)** (ex: `Account`, `Transaction`, `Category`, `amount`, `balance`, `transaction_type`).
 
 ## Stack Tecnológica e Restrições de Arquitetura
 
@@ -45,7 +46,7 @@ Toda a documentação, especificações de funcionalidades (`spec.md`), planos t
 
 - **Gestão de Dependências**: Todas as adições ou alterações de bibliotecas DEVEM ser executadas exclusivamente via `uv add` ou `uv lock`.
 - **Qualidade de Código e Formatação**: O código deve passar pelas regras de validação do `ruff` (linter e formatador).
-- **Testes Automatizados**: Implementações de regras de cálculo, filtros de transações e ferramentas MCP DEVEM ser acompanhadas de testes automatizados com `pytest`.
+- **Testes Automatizados**: Implementações de regras de cálculo, filtros de transações e ferramentas MCP DEVEM ser acompanhadas de testes automatizados com `pytest` e nomenclaturas em inglês.
 - **Especificação Prévia**: Nenhuma funcionalidade significativa deve ser implementada sem especificação prévia via Spec Kit (`/speckit-specify` e `/speckit-plan`).
 
 ## Governance
@@ -59,4 +60,4 @@ A presente Constituição define a governança técnica e os princípios inegoci
   - **PATCH**: Correções de texto, formatação e esclarecimentos semânticos.
 - **Revisão de Conformidade**: Todas as tarefas executadas pelo Spec Kit devem validar conformidade com estes princípios antes da conclusão.
 
-**Version**: 1.1.0 | **Ratified**: 2026-09-19 | **Last Amended**: 2026-09-19
+**Version**: 1.1.1 | **Ratified**: 2026-09-19 | **Last Amended**: 2026-09-19

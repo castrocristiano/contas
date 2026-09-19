@@ -66,25 +66,25 @@ Como usuário, quero que o sistema rejeite imediatamente tentativas de lançamen
 
 ### Requisitos Funcionais
 
-- **RF-001**: O sistema DEVE permitir a criação, consulta e listagem de contas financeiras (ex: nome, tipo de conta, saldo inicial e moeda padrão BRL).
-- **RF-002**: O sistema DEVE permitir a criação, consulta e listagem de categorias financeiras divididas entre receitas e despesas (ex: Moradia, Alimentação, Transporte, Salário).
-- **RF-003**: O sistema DEVE permitir o registro de transações financeiras contendo: identificador único, data/hora da transação, valor monetário decimal exato, tipo (receita, despesa ou transferência), conta de origem, conta de destino (opcional para transferências), categoria e descrição.
+- **RF-001**: O sistema DEVE permitir a criação, consulta e listagem de contas financeiras (`Account`) contendo nome, tipo de conta, saldo inicial e moeda padrão BRL.
+- **RF-002**: O sistema DEVE permitir a criação, consulta e listagem de categorias financeiras (`Category`) divididas entre receitas e despesas (`income` / `expense`).
+- **RF-003**: O sistema DEVE permitir o registro de transações financeiras (`Transaction`) contendo: identificador único (`id`), data/hora (`transaction_date`), valor monetário decimal exato (`amount`), tipo (`transaction_type`: `income`, `expense`, `transfer`), conta de origem (`source_account_id`), conta de destino opcional (`destination_account_id`), categoria (`category_id`) e descrição (`description`).
 - **RF-004**: O sistema DEVE garantir atomicidade nas operações de transferência entre contas (o débito na origem e o crédito no destino ocorrem juntos ou falham juntos).
-- **RF-005**: O sistema DEVE disponibilizar ferramentas padronizadas no protocolo do assistente para: `criar_conta`, `listar_contas`, `registrar_transacao`, `consultar_extrato` e `obter_resumo_financeiro`.
-- **RF-006**: O sistema DEVE validar rigorosamente todos os parâmetros de entrada de acordo com esquemas declarativos antes de executar qualquer persistência.
-- **RF-007**: O sistema DEVE expor um mecanismo de verificação de prontidão e saúde da base de dados e do servidor de comunicação.
+- **RF-005**: O sistema DEVE disponibilizar ferramentas padronizadas no protocolo MCP com identificadores em inglês: `create_account`, `list_accounts`, `record_transaction`, `get_statement` e `get_financial_summary`.
+- **RF-006**: O sistema DEVE validar rigorosamente todos os parâmetros de entrada através de esquemas Pydantic declarativos antes de executar qualquer persistência.
+- **RF-007**: O sistema DEVE expor mecanismo de verificação de prontidão e saúde (`health_check`) da base de dados e do servidor MCP.
 
-### Entidades Principais
+### Entidades Principais (Código em EN-US)
 
-- **Conta (Account)**: Entidade que representa uma fonte ou destino de recursos financeiros (banco, carteira, corretora). Possui nome, identificador, tipo (corrente, poupança, investimento, dinheiro), saldo atual e data de criação.
-- **Categoria (Category)**: Agrupador conceitual de movimentações financeiras. Possui nome, tipo (receita ou despesa) e status de ativação.
-- **Transação (Transaction)**: Registro imutável de uma movimentação financeira ocorrida ou agendada. Possui identificador, valor com precisão de duas casas decimais, tipo (receita, despesa, transferência), conta de origem, conta de destino (quando transferência), categoria associada, data de competência, status (liquidada, pendente) e notas descritivas.
+- **Conta (`Account`)**: Entidade que representa uma fonte ou destino de recursos financeiros (banco, carteira, corretora). Campos de código e banco: `id`, `name`, `account_type` (`checking`, `savings`, `investment`, `cash`), `balance`, `currency`, `created_at`.
+- **Categoria (`Category`)**: Agrupador conceitual de movimentações financeiras. Campos de código e banco: `id`, `name`, `category_type` (`income`, `expense`), `is_active`.
+- **Transação (`Transaction`)**: Registro imutável de uma movimentação financeira ocorrida ou agendada. Campos de código e banco: `id`, `amount` (tipo `Decimal`), `transaction_type` (`income`, `expense`, `transfer`), `source_account_id`, `destination_account_id`, `category_id`, `transaction_date`, `status` (`cleared`, `pending`), `description`.
 
 ## Critérios de Sucesso *(obrigatório)*
 
 ### Resultados Mensuráveis
 
-- **CS-001**: 100% das transações e cálculos de saldos utilizam precisão decimal exata, com zero divergência de centavos decorrentes de ponto flutuante binário.
+- **CS-001**: 100% das transações e cálculos de saldos utilizam precisão decimal exata (`Decimal`), com zero divergência de centavos decorrentes de ponto flutuante binário.
 - **CS-002**: Operações de registro de transação e consulta de saldos pelo assistente são processadas e respondidas em menos de 1 segundo em ambiente local.
 - **CS-003**: 100% das requisições com dados monetários inválidos ou contas inexistentes são bloqueadas na camada de validação de schema sem gravação em banco.
 - **CS-004**: O ambiente completo (serviços de persistência e servidor de assistência) sobe e atinge estado de prontidão operacional com um único comando de orquestração.
@@ -96,3 +96,4 @@ Como usuário, quero que o sistema rejeite imediatamente tentativas de lançamen
 - **Ambiente de Usuário**: O sistema é voltado para uso doméstico/unifamiliar em ambiente de infraestrutura local containerizada.
 - **Comunicação do Assistente**: O protocolo padrão para interação autônoma com assistentes e modelos de linguagem externos é o Model Context Protocol (MCP).
 - **Persistência Relacional**: Os dados financeiros residem em banco de dados relacional que suporte integridade referencial, transações ACID e precisão decimal numérica.
+- **Linguagem de Código**: Todo o código-fonte, nomes de arquivos, classes, funções, variáveis, schemas e testes serão desenvolvidos em inglês (EN-US).
