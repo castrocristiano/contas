@@ -21,7 +21,7 @@ class RecordTransactionInput(BaseModel):
 
     amount: str = Field(
         ...,
-        description="Transaction amount as a positive decimal string (e.g., '35.50'). Must be > 0.",
+        description="Transaction amount as a positive decimal string (e.g., '35.50'). Must be > 0. For installments, this can represent the first installment amount or total amount depending on input.",
         pattern=r"^[0-9]+(\.[0-9]{1,2})?$",
     )
     transaction_type: TransactionType = Field(
@@ -53,6 +53,21 @@ class RecordTransactionInput(BaseModel):
         default=TransactionStatus.CLEARED,
         description="Settlement status. 'pending' for scheduled future transactions.",
     )
+    total_installments: int | None = Field(
+        default=None,
+        ge=1,
+        description="Total number of installments for installment purchases (e.g., 10). Optional.",
+    )
+    installment_number: int | None = Field(
+        default=None,
+        ge=1,
+        description="Current installment number (1..total_installments). Optional.",
+    )
+    total_amount: str | None = Field(
+        default=None,
+        description="Total purchase amount if split across installments (e.g. '1200.00'). Optional.",
+        pattern=r"^[0-9]+(\.[0-9]{1,2})?$",
+    )
 
     @model_validator(mode="after")
     def validate_transaction(self) -> "RecordTransactionInput":
@@ -74,6 +89,16 @@ class RecordTransactionInput(BaseModel):
                     "destination_account_id must be different from source_account_id"
                 )
 
+        if (
+            self.total_installments is not None
+            and self.total_installments > 1
+            and self.installment_number is not None
+            and self.installment_number > self.total_installments
+        ):
+            raise ValueError(
+                "installment_number cannot be greater than total_installments"
+            )
+
         return self
 
 
@@ -88,6 +113,10 @@ class RecordTransactionResponse(BaseModel):
     description: str
     source_account: SourceAccountSummary
     category_id: UUID | None = None
+    installment_id: UUID | None = None
+    installment_number: int | None = None
+    total_installments: int | None = None
+    total_amount: str | None = None
     created_at: datetime
 
 
@@ -157,6 +186,10 @@ class StatementItem(BaseModel):
     transaction_type: TransactionType
     status: TransactionStatus
     category: str | None = None
+    installment_id: UUID | None = None
+    installment_number: int | None = None
+    total_installments: int | None = None
+    total_amount: str | None = None
 
 
 class StatementSummary(BaseModel):
@@ -203,3 +236,38 @@ class FinancialSummaryResponse(BaseModel):
     accounts: list[FinancialSummaryAccountItem]
     total_assets: str
     currency: str
+
+
+class GetInstallmentPlanInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    installment_id: UUID = Field(
+        ...,
+        description="UUID of the installment plan to retrieve",
+    )
+
+
+class InstallmentItemResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    id: UUID
+    installment_number: int
+    amount: str
+    due_date: datetime
+    status: TransactionStatus
+
+
+class InstallmentPlanResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    installment_id: UUID
+    description: str
+    account_id: UUID
+    category_id: UUID | None
+    total_amount: str
+    total_installments: int
+    paid_amount: str
+    remaining_amount: str
+    paid_installments: int
+    remaining_installments: int
+    installments: list[InstallmentItemResponse]

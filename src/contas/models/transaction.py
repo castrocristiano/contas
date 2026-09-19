@@ -77,6 +77,26 @@ class Transaction(SQLModel, table=True):
         nullable=True,
         index=True,
     )
+    installment_id: uuid.UUID | None = Field(
+        default=None,
+        nullable=True,
+        index=True,
+    )
+    installment_number: int | None = Field(
+        default=None,
+        nullable=True,
+    )
+    total_installments: int | None = Field(
+        default=None,
+        nullable=True,
+    )
+    total_amount: Decimal | None = Field(
+        default=None,
+        sa_type=Numeric(14, 2),
+        max_digits=14,
+        decimal_places=2,
+        nullable=True,
+    )
 
     source_account: Account = Relationship(
         back_populates="outgoing_transactions",

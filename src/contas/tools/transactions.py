@@ -1,5 +1,6 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from uuid import uuid4
 
 from mcp.server.mcpserver import MCPServer
 from sqlalchemy.exc import DBAPIError
@@ -14,7 +15,10 @@ from contas.schemas.transaction import (
     FinancialSummaryAccountItem,
     FinancialSummaryResponse,
     GetFinancialSummaryInput,
+    GetInstallmentPlanInput,
     GetStatementInput,
+    InstallmentItemResponse,
+    InstallmentPlanResponse,
     RecordTransactionInput,
     RecordTransactionResponse,
     SourceAccountSummary,
@@ -29,15 +33,17 @@ from contas.tools.errors import (
     CategoryNotFoundError,
     ContasError,
     DatabaseError,
+    InstallmentPlanNotFoundError,
     IntegrityError,
     TransferSameAccountError,
 )
+from contas.utils.installments import add_months, calculate_installments
 
 
 def register_transaction_tools(mcp: MCPServer) -> None:
     @mcp.tool()
     async def record_transaction(payload: RecordTransactionInput) -> dict:
-        """Record a financial transaction (income, expense, transfer) and atomically update balances."""
+        """Record a financial transaction (income, expense, transfer, or installment purchase) and atomically update balances."""
         try:
             if (
                 payload.transaction_type == TransactionType.TRANSFER
@@ -50,6 +56,32 @@ def register_transaction_tools(mcp: MCPServer) -> None:
             parsed_date = datetime.now(UTC)
             if payload.transaction_date:
                 parsed_date = datetime.fromisoformat(payload.transaction_date)
+
+            # Determine installment parameters
+            is_installment = (
+                payload.total_installments is not None
+                and payload.total_installments > 1
+            )
+            installment_id = uuid4() if is_installment else None
+            installment_amounts: list[Decimal] = []
+
+            if is_installment:
+                total_installments = payload.total_installments
+                assert total_installments is not None
+
+                total_amount = (
+                    Decimal(payload.total_amount) if payload.total_amount else amount
+                )
+                installment_amounts = calculate_installments(
+                    total_amount, total_installments
+                )
+                first_installment_amount = installment_amounts[0]
+            else:
+                total_installments = payload.total_installments
+                total_amount = (
+                    Decimal(payload.total_amount) if payload.total_amount else None
+                )
+                first_installment_amount = amount
 
             async with get_session() as session:
                 # 1. Validate source account
@@ -99,22 +131,23 @@ def register_transaction_tools(mcp: MCPServer) -> None:
                     if not category:
                         raise CategoryNotFoundError(str(payload.category_id))
 
-                # 4. Atomic balance update
-                if payload.transaction_type == TransactionType.EXPENSE:
-                    source_account.balance -= amount
-                elif payload.transaction_type == TransactionType.INCOME:
-                    source_account.balance += amount
-                elif payload.transaction_type == TransactionType.TRANSFER:
-                    source_account.balance -= amount
-                    assert destination_account is not None
-                    destination_account.balance += amount
-                    session.add(destination_account)
+                # 4. Atomic balance update (only first installment if cleared)
+                if payload.status == TransactionStatus.CLEARED:
+                    if payload.transaction_type == TransactionType.EXPENSE:
+                        source_account.balance -= first_installment_amount
+                    elif payload.transaction_type == TransactionType.INCOME:
+                        source_account.balance += first_installment_amount
+                    elif payload.transaction_type == TransactionType.TRANSFER:
+                        source_account.balance -= first_installment_amount
+                        assert destination_account is not None
+                        destination_account.balance += first_installment_amount
+                        session.add(destination_account)
 
-                session.add(source_account)
+                    session.add(source_account)
 
-                # 5. Persist transaction
+                # 5. Persist first transaction
                 transaction = Transaction(
-                    amount=amount,
+                    amount=first_installment_amount,
                     transaction_type=payload.transaction_type,
                     status=payload.status,
                     transaction_date=parsed_date,
@@ -122,8 +155,34 @@ def register_transaction_tools(mcp: MCPServer) -> None:
                     source_account_id=payload.source_account_id,
                     destination_account_id=payload.destination_account_id,
                     category_id=payload.category_id,
+                    installment_id=installment_id,
+                    installment_number=1
+                    if is_installment
+                    else payload.installment_number,
+                    total_installments=total_installments,
+                    total_amount=total_amount,
                 )
                 session.add(transaction)
+
+                # 6. If installment, persist subsequent installments with status=PENDING
+                if is_installment:
+                    for idx, inst_amount in enumerate(installment_amounts[1:], start=2):
+                        inst_date = add_months(parsed_date, idx - 1)
+                        sub_tx = Transaction(
+                            amount=inst_amount,
+                            transaction_type=payload.transaction_type,
+                            status=TransactionStatus.PENDING,
+                            transaction_date=inst_date,
+                            description=payload.description,
+                            source_account_id=payload.source_account_id,
+                            destination_account_id=payload.destination_account_id,
+                            category_id=payload.category_id,
+                            installment_id=installment_id,
+                            installment_number=idx,
+                            total_installments=total_installments,
+                            total_amount=total_amount,
+                        )
+                        session.add(sub_tx)
 
                 await session.commit()
                 await session.refresh(source_account)
@@ -142,6 +201,12 @@ def register_transaction_tools(mcp: MCPServer) -> None:
                     new_balance=f"{source_account.balance:.2f}",
                 ),
                 category_id=transaction.category_id,
+                installment_id=transaction.installment_id,
+                installment_number=transaction.installment_number,
+                total_installments=transaction.total_installments,
+                total_amount=f"{transaction.total_amount:.2f}"
+                if transaction.total_amount is not None
+                else None,
                 created_at=transaction.created_at,
             )
             return response.model_dump(mode="json")
@@ -213,6 +278,12 @@ def register_transaction_tools(mcp: MCPServer) -> None:
                             transaction_type=tx.transaction_type,
                             status=tx.status,
                             category=category_name,
+                            installment_id=tx.installment_id,
+                            installment_number=tx.installment_number,
+                            total_installments=tx.total_installments,
+                            total_amount=f"{tx.total_amount:.2f}"
+                            if tx.total_amount is not None
+                            else None,
                         )
                     )
 
@@ -237,6 +308,70 @@ def register_transaction_tools(mcp: MCPServer) -> None:
                     ),
                 )
                 return response.model_dump(mode="json")
+        except ContasError as err:
+            return err.to_dict()
+        except DBAPIError as err:
+            return DatabaseError(str(err.orig or err)).to_dict()
+
+    @mcp.tool()
+    async def get_installment_plan(payload: GetInstallmentPlanInput) -> dict:
+        """Get the full installment plan and schedule for a given installment purchase ID."""
+        try:
+            async with get_session() as session:
+                query = (
+                    select(Transaction)
+                    .where(Transaction.installment_id == payload.installment_id)
+                    .order_by(Transaction.installment_number.asc())
+                )
+                transactions = (await session.exec(query)).all()
+
+            if not transactions:
+                raise InstallmentPlanNotFoundError(str(payload.installment_id))
+
+            first_tx = transactions[0]
+            total_amount = first_tx.total_amount or sum(
+                (t.amount for t in transactions), Decimal("0.00")
+            )
+            total_installments = first_tx.total_installments or len(transactions)
+
+            paid_amount = Decimal("0.00")
+            paid_count = 0
+            remaining_amount = Decimal("0.00")
+            remaining_count = 0
+
+            items: list[InstallmentItemResponse] = []
+            for tx in transactions:
+                if tx.status == TransactionStatus.CLEARED:
+                    paid_amount += tx.amount
+                    paid_count += 1
+                else:
+                    remaining_amount += tx.amount
+                    remaining_count += 1
+
+                items.append(
+                    InstallmentItemResponse(
+                        id=tx.id,
+                        installment_number=tx.installment_number or 0,
+                        amount=f"{tx.amount:.2f}",
+                        due_date=tx.transaction_date,
+                        status=tx.status,
+                    )
+                )
+
+            response = InstallmentPlanResponse(
+                installment_id=payload.installment_id,
+                description=first_tx.description,
+                account_id=first_tx.source_account_id,
+                category_id=first_tx.category_id,
+                total_amount=f"{total_amount:.2f}",
+                total_installments=total_installments,
+                paid_amount=f"{paid_amount:.2f}",
+                remaining_amount=f"{remaining_amount:.2f}",
+                paid_installments=paid_count,
+                remaining_installments=remaining_count,
+                installments=items,
+            )
+            return response.model_dump(mode="json")
         except ContasError as err:
             return err.to_dict()
         except DBAPIError as err:
