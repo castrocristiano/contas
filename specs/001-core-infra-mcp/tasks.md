@@ -9,12 +9,12 @@
 
 **Propósito**: Estrutura de diretórios, arquivos de configuração e orquestração de containers.
 
-- [ ] T001 Criar estrutura de diretórios `src/contas/db/`, `src/contas/models/`, `src/contas/schemas/`, `src/contas/tools/` e `tests/unit/`, `tests/integration/`
-- [ ] T002 Criar `podman-compose.yml` com serviço `db` (postgres:16-alpine), volume nomeado `postgres_data`, healthcheck `pg_isready`, rede `contas_network` e `depends_on: condition: service_healthy` — ver [research/infrastructure.md](./research/infrastructure.md)
-- [ ] T003 [P] Criar `.env.example` com as variáveis `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL` (formato `postgresql+psycopg://...`) e `OPENAI_API_KEY`
-- [ ] T004 [P] Criar `Dockerfile` para o serviço `mcp-server` baseado em `python:3.12-slim` com instalação via `uv`
-- [ ] T005 Inicializar Alembic com template assíncrono: `uv run alembic init -t async migrations`
-- [ ] T006 Adicionar dependência `pydantic-settings>=2.0` ao `pyproject.toml` via `uv add pydantic-settings`
+- [x] T001 Criar estrutura de diretórios `src/contas/db/`, `src/contas/models/`, `src/contas/schemas/`, `src/contas/tools/` e `tests/unit/`, `tests/integration/`
+- [x] T002 Criar `podman-compose.yml` com serviço `db` (postgres:16-alpine), volume nomeado `postgres_data`, healthcheck `pg_isready`, rede `contas_network` e `depends_on: condition: service_healthy` — ver [research/infrastructure.md](./research/infrastructure.md)
+- [x] T003 [P] Criar `.env.example` com as variáveis `POSTGRES_DB`, `POSTGRES_USER`, `POSTGRES_PASSWORD`, `DATABASE_URL` (formato `postgresql+psycopg://...`) e `OPENAI_API_KEY`
+- [x] T004 [P] Criar `Dockerfile` para o serviço `mcp-server` baseado em `python:3.12-slim` com instalação via `uv`
+- [x] T005 Inicializar Alembic com template assíncrono: `uv run alembic init -t async migrations`
+- [x] T006 Adicionar dependência `pydantic-settings>=2.0` ao `pyproject.toml` via `uv add pydantic-settings`
 
 **Checkpoint**: `podman-compose up -d` sobe o PostgreSQL em estado `healthy`. Estrutura de diretórios criada.
 

@@ -29,10 +29,10 @@ Representa uma fonte ou destino de recursos financeiros (conta corrente, poupan�
 **Enums — `AccountType`**:
 ```python
 class AccountType(StrEnum):
-    CHECKING   = "checking"
-    SAVINGS    = "savings"
+    CHECKING = "checking"
+    SAVINGS = "savings"
     INVESTMENT = "investment"
-    CASH       = "cash"
+    CASH = "cash"
 ```
 
 ---
@@ -54,7 +54,7 @@ Agrupador conceitual de movimentações financeiras (ex: "Alimentação", "Salá
 **Enums — `CategoryType`**:
 ```python
 class CategoryType(StrEnum):
-    INCOME  = "income"
+    INCOME = "income"
     EXPENSE = "expense"
 ```
 
@@ -85,8 +85,8 @@ Registro imutável de uma movimentação financeira (receita, despesa ou transfe
 **Enums — `TransactionType`**:
 ```python
 class TransactionType(StrEnum):
-    INCOME   = "income"
-    EXPENSE  = "expense"
+    INCOME = "income"
+    EXPENSE = "expense"
     TRANSFER = "transfer"
 ```
 
