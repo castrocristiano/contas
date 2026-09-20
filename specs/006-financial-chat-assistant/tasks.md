@@ -26,7 +26,8 @@
     - [x] 4.1.4 `test_execute_pending_action_calls_record_transaction`
     - [x] 4.1.5 `test_build_action_summary_expense`
     - [x] 4.1.6 `test_execute_read_tool_list_accounts`
-    - [x] 4.1.7 `test_chat_raises_without_api_key`
+    - [x] 4.1.7 `test_execute_read_tool_get_statement_defaults`
+    - [x] 4.1.8 `test_chat_raises_without_api_key`
 
 - [x] 5. Interface Streamlit
   - [x] 5.1 Adicionar `"💬 Assistente Financeiro"` no `st.sidebar.radio` em `app.py`

@@ -107,11 +107,11 @@ _TOOLS: list[dict] = [
                     },
                     "start_date": {
                         "type": "string",
-                        "description": "Data inicial no formato YYYY-MM-DD.",
+                        "description": "Data inicial no formato YYYY-MM-DD. Se não informada, busca desde o início do ano anterior ou período amplo.",
                     },
                     "end_date": {
                         "type": "string",
-                        "description": "Data final no formato YYYY-MM-DD.",
+                        "description": "Data final no formato YYYY-MM-DD. Se não informada, busca até o final do ano corrente ou futuro.",
                     },
                     "limit": {
                         "type": "integer",
@@ -119,7 +119,7 @@ _TOOLS: list[dict] = [
                         "default": 50,
                     },
                 },
-                "required": ["start_date", "end_date"],
+                "required": [],
             },
         },
     },
@@ -296,12 +296,16 @@ def _execute_read_tool(
         if account is None:
             return json.dumps({"error": "Nenhuma conta encontrada."})
 
+        # Sensible defaults if not specified: cover broad range to not miss transactions
+        start_date = args.get("start_date") or f"{now.year - 1}-01-01"
+        end_date = args.get("end_date") or f"{now.year + 2}-12-31"
+
         from uuid import UUID
 
         result = UIService.get_statement(
             account_id=UUID(account["id"]),
-            start_date=args["start_date"],
-            end_date=args["end_date"],
+            start_date=start_date,
+            end_date=end_date,
             limit=args.get("limit", 50),
         )
         return json.dumps(result, ensure_ascii=False, default=str)
@@ -441,7 +445,8 @@ Você tem acesso às finanças do usuário: contas, saldos, extratos, categorias
 Diretrizes:
 - Responda sempre em Português do Brasil.
 - Seja conciso mas completo. Use markdown quando útil (listas, negrito, tabelas simples).
-- Para consultas, use as ferramentas disponíveis para buscar dados atualizados antes de responder.
+- Para consultas de extrato e transações de uma conta, use a ferramenta `get_statement`. Se o usuário não especificar datas, use um período amplo (ou deixe sem datas) para capturar lançamentos passados, presentes ou futuros (como compras parceladas ou faturas com datas futuras).
+- Se o saldo de uma conta estiver diferente de zero, sempre consulte o extrato dela antes de afirmar que não há transações.
 - Para criar contas (create_account) ou registrar transações (record_transaction), o sistema exibirá uma tela de confirmação — não execute sem ela.
 - Formate valores monetários sempre como R$ X.XXX,XX (padrão brasileiro).
 - Se dados de ferramentas contiverem um campo "error", informe o usuário de forma amigável.
