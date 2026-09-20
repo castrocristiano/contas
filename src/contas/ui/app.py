@@ -41,6 +41,7 @@ def main():
         [
             "📊 Dashboard & Extrato",
             "➕ Novo Lançamento",
+            "🧾 Importar Fatura PDF",
             "🎯 Orçamentos & Metas",
             "⚙️ Configurações",
         ],
@@ -337,7 +338,216 @@ def main():
                         st.error(f"Erro de validação: {exc}")
 
     # -------------------------------------------------------------
-    # 3. ORÇAMENTOS & METAS
+    # 3. IMPORTAR FATURA PDF & CHAT INTERATIVO
+    # -------------------------------------------------------------
+    elif menu == "🧾 Importar Fatura PDF":
+        from contas.services.invoice_parser import (
+            extract_text_from_pdf,
+            parse_invoice_with_openai,
+            refine_items_with_chat,
+        )
+
+        st.title("🧾 Importar Fatura de Cartão (PDF)")
+        st.caption(
+            "Carregue sua fatura em PDF, use o chat interativo para filtrar despesas com IA e importe os lançamentos com um clique."
+        )
+
+        accounts_data = UIService.list_accounts()
+        accounts = accounts_data.get("accounts", [])
+        categories_data = UIService.list_categories(category_type="expense")
+        categories = categories_data.get("categories", [])
+        category_names = [c["name"] for c in categories]
+
+        if not accounts:
+            st.warning("Cadastre uma conta antes de importar faturas.")
+            st.stop()
+
+        col_cfg1, col_cfg2 = st.columns([1, 1])
+        with col_cfg1:
+            selected_acc_name = st.selectbox(
+                "Conta de Destino das Despesas",
+                options=[a["name"] for a in accounts],
+            )
+            chosen_account = next(a for a in accounts if a["name"] == selected_acc_name)
+        with col_cfg2:
+            pdf_file = st.file_uploader(
+                "Selecione o arquivo PDF da fatura", type=["pdf"]
+            )
+
+        # Inicializa estado da sessão para os itens extraídos e histórico do chat
+        if "invoice_items" not in st.session_state:
+            st.session_state["invoice_items"] = []
+        if "chat_history" not in st.session_state:
+            st.session_state["chat_history"] = []
+        if "last_processed_file" not in st.session_state:
+            st.session_state["last_processed_file"] = None
+
+        if (
+            pdf_file is not None
+            and st.session_state["last_processed_file"] != pdf_file.name
+        ):
+            with st.spinner("Lendo arquivo PDF e extraindo compras com OpenAI..."):
+                try:
+                    pdf_bytes = pdf_file.read()
+                    raw_text = extract_text_from_pdf(pdf_bytes)
+                    parsed_container = parse_invoice_with_openai(
+                        raw_text, categories=category_names
+                    )
+                    items_dicts = [item.model_dump() for item in parsed_container.items]
+                    st.session_state["invoice_items"] = items_dicts
+                    st.session_state["last_processed_file"] = pdf_file.name
+                    st.session_state["chat_history"] = [
+                        {
+                            "role": "assistant",
+                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), mudar categorias ou tirar dúvidas.",
+                        }
+                    ]
+                    st.success(
+                        f"Fatura processada! {len(items_dicts)} despesas encontradas."
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    st.error(f"Erro ao processar fatura: {exc}")
+
+        items = st.session_state["invoice_items"]
+
+        if items:
+            total_invoice = sum(float(i["amount"]) for i in items)
+            m1, m2 = st.columns(2)
+            m1.metric("Total da Fatura (Itens Atuais)", format_currency(total_invoice))
+            m2.metric("Quantidade de Despesas", len(items))
+
+            st.divider()
+
+            # Seção de Chat Interativo
+            st.subheader("💬 Chat Interativo de Refinamento e Filtro")
+            st.caption(
+                "Converse com a IA para ajustar a lista antes de efetivar os lançamentos."
+            )
+
+            for msg in st.session_state["chat_history"]:
+                with st.chat_message(msg["role"]):
+                    st.write(msg["content"])
+
+            user_query = st.chat_input(
+                "Ex: Desconsidere gastos de farmácia, ou agrupe compras por categoria..."
+            )
+            if user_query:
+                st.session_state["chat_history"].append(
+                    {"role": "user", "content": user_query}
+                )
+                with st.spinner("Processando solicitação com IA..."):
+                    try:
+                        updated_items, reply = refine_items_with_chat(
+                            current_items=st.session_state["invoice_items"],
+                            user_message=user_query,
+                            categories=category_names,
+                        )
+                        st.session_state["invoice_items"] = updated_items
+                        st.session_state["chat_history"].append(
+                            {"role": "assistant", "content": reply}
+                        )
+                        st.rerun()
+                    except Exception as exc:  # noqa: BLE001
+                        st.error(f"Erro no chat: {exc}")
+
+            st.divider()
+
+            # Tabela e Seleção Final para Importação
+            st.subheader("📋 Lançamentos a Importar")
+            st.caption(
+                "Confira os lançamentos abaixo. Marque ou desmarque os que deseja cadastrar no sistema."
+            )
+
+            df_import = []
+            for idx, item in enumerate(items):
+                inst_text = "À vista"
+                if item.get("installment_current") and item.get("installment_total"):
+                    inst_text = (
+                        f"{item['installment_current']}/{item['installment_total']}"
+                    )
+
+                df_import.append(
+                    {
+                        "Importar": True,
+                        "Data": item["date"],
+                        "Descrição": item["description"],
+                        "Valor": float(item["amount"]),
+                        "Categoria": item.get("category_suggestion") or "Outros",
+                        "Parcela": inst_text,
+                    }
+                )
+
+            edited_df = st.data_editor(
+                pd.DataFrame(df_import),
+                use_container_width=True,
+                hide_index=True,
+                column_config={
+                    "Importar": st.column_config.CheckboxColumn(
+                        "Importar?", default=True
+                    ),
+                    "Valor": st.column_config.NumberColumn(
+                        "Valor (R$)", format="R$ %.2f"
+                    ),
+                },
+            )
+
+            if st.button("🚀 Confirmar e Lançar Despesas Selecionadas", type="primary"):
+                selected_rows = edited_df[edited_df["Importar"] == True]
+                if selected_rows.empty:
+                    st.warning("Nenhum lançamento selecionado para importação.")
+                else:
+                    success_count = 0
+                    errors = []
+
+                    with st.spinner(f"Importando {len(selected_rows)} despesas..."):
+                        for _, row in selected_rows.iterrows():
+                            # Resolver ID da categoria se existir
+                            cat_id = None
+                            matched_cat = next(
+                                (
+                                    c
+                                    for c in categories
+                                    if c["name"].lower()
+                                    == str(row["Categoria"]).lower()
+                                ),
+                                None,
+                            )
+                            if matched_cat:
+                                cat_id = UUID(matched_cat["id"])
+
+                            val_str = f"{row['Valor']:.2f}"
+                            res = UIService.record_transaction(
+                                amount=val_str,
+                                transaction_type=TransactionType.EXPENSE,
+                                source_account_id=UUID(chosen_account["id"]),
+                                category_id=cat_id,
+                                description=str(row["Descrição"]),
+                                transaction_date=f"{row['Data']}T12:00:00Z",
+                                total_installments=1,
+                            )
+                            if "error" in res:
+                                errors.append(
+                                    f"{row['Descrição']}: {res['error']['message']}"
+                                )
+                            else:
+                                success_count += 1
+
+                    if errors:
+                        st.error("Alguns erros ocorreram:\n" + "\n".join(errors))
+                    if success_count > 0:
+                        st.success(
+                            f"{success_count} despesas foram importadas com sucesso na conta {chosen_account['name']}!"
+                        )
+                        # Limpa estado da fatura
+                        st.session_state["invoice_items"] = []
+                        st.session_state["chat_history"] = []
+                        st.session_state["last_processed_file"] = None
+                        st.rerun()
+        else:
+            st.info("Envie um arquivo PDF de fatura acima para iniciar.")
+
+    # -------------------------------------------------------------
+    # 4. ORÇAMENTOS & METAS
     # -------------------------------------------------------------
     elif menu == "🎯 Orçamentos & Metas":
         st.title("🎯 Acompanhamento Orçamentário")
