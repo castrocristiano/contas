@@ -73,6 +73,15 @@ class InstallmentPlanNotFoundError(ContasError):
         )
 
 
+class TransactionNotFoundError(ContasError):
+    def __init__(self, transaction_id: str) -> None:
+        super().__init__(
+            code="TRANSACTION_NOT_FOUND",
+            message=f"Transaction with ID '{transaction_id}' was not found.",
+            details={"transaction_id": transaction_id},
+        )
+
+
 class DatabaseError(ContasError):
     def __init__(self, message: str, details: dict[str, Any] | None = None) -> None:
         super().__init__(code="DATABASE_ERROR", message=message, details=details)

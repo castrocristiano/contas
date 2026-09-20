@@ -5,6 +5,7 @@ from contas.schemas.account import CreateAccountInput, ListAccountsInput
 from contas.schemas.budget import GetBudgetStatusInput, SetBudgetInput
 from contas.schemas.category import CreateCategoryInput, ListCategoriesInput
 from contas.schemas.transaction import (
+    DeleteTransactionInput,
     GetInstallmentPlanInput,
     GetStatementInput,
     RecordTransactionInput,
@@ -177,4 +178,19 @@ class UIService:
         handler = server._tool_manager._tools["get_installment_plan"].fn
         return run_async(
             handler(payload=GetInstallmentPlanInput(installment_id=installment_id))
+        )
+
+    @staticmethod
+    def delete_transaction(
+        transaction_id: UUID, delete_all_installments: bool = False
+    ) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["delete_transaction"].fn
+        return run_async(
+            handler(
+                payload=DeleteTransactionInput(
+                    transaction_id=transaction_id,
+                    delete_all_installments=delete_all_installments,
+                )
+            )
         )

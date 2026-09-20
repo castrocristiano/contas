@@ -160,6 +160,60 @@ def main():
                     st.dataframe(
                         pd.DataFrame(df_data), use_container_width=True, hide_index=True
                     )
+
+                    # Ações de Gerenciamento / Exclusão
+                    with st.expander("🗑️ Excluir Lançamento"):
+                        st.caption(
+                            "Selecione uma transação para excluir. Se a transação for liquidada, o saldo será estornado automaticamente."
+                        )
+                        tx_options = {
+                            f"{datetime.fromisoformat(t['transaction_date']).strftime('%d/%m/%Y')} - {t['description']} ({format_currency(t['amount'])}) [{t['id'][:8]}]": t
+                            for t in txs
+                        }
+                        selected_label = st.selectbox(
+                            "Escolha a transação",
+                            options=list(tx_options.keys()),
+                            key="select_tx_delete",
+                        )
+
+                        if selected_label:
+                            chosen_tx = tx_options[selected_label]
+                            is_inst = bool(chosen_tx.get("installment_id"))
+
+                            delete_all = False
+                            if is_inst:
+                                st.info(
+                                    f"Esta transação faz parte de uma compra parcelada ({chosen_tx.get('installment_number')}/{chosen_tx.get('total_installments')})."
+                                )
+                                delete_all = st.checkbox(
+                                    "Excluir TODAS as parcelas desta compra parcelada",
+                                    value=False,
+                                    help="Se marcado, remove todas as parcelas do plano e estorna as que já foram liquidadas.",
+                                )
+
+                            col_del_btn, _ = st.columns([1, 4])
+                            with col_del_btn:
+                                if st.button(
+                                    "Confirmar Exclusão",
+                                    type="primary",
+                                    key="btn_confirm_delete_tx",
+                                ):
+                                    del_res = UIService.delete_transaction(
+                                        transaction_id=UUID(chosen_tx["id"]),
+                                        delete_all_installments=delete_all,
+                                    )
+                                    if "error" in del_res:
+                                        st.error(
+                                            f"Erro ao excluir: {del_res['error']['message']}"
+                                        )
+                                    else:
+                                        st.success(
+                                            del_res.get(
+                                                "message",
+                                                "Transação excluída com sucesso!",
+                                            )
+                                        )
+                                        st.rerun()
                 else:
                     st.info("Nenhuma transação encontrada no período selecionado.")
 
