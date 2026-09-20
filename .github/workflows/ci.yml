@@ -123,3 +123,39 @@ jobs:
               --title "chore: merge develop into main" \
               --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
           fi
+
+  # Cria Release no GitHub quando código for mergeado na branch main (após build & test com sucesso)
+  release-on-main:
+    name: Create GitHub Release
+    needs: build-and-test
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Determine version tag and create Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Extrai a versão definida no pyproject.toml
+          PROJECT_VERSION=$(grep -m1 '^version =' pyproject.toml | sed -E 's/version = "(.*)"/\1/')
+          if [ -z "$PROJECT_VERSION" ]; then
+            PROJECT_VERSION="0.1.0"
+          fi
+
+          TAG="v${PROJECT_VERSION}"
+          
+          # Se a tag já existir para esta versão, incrementa sufixo com base no run_number para evitar duplicidade
+          if git rev-parse "$TAG" >/dev/null 2>&1; then
+            TAG="v${PROJECT_VERSION}-${{ github.run_number }}"
+          fi
+
+          echo "Criando tag e release para: $TAG"
+          gh release create "$TAG" \
+            --target main \
+            --title "Release $TAG" \
+            --generate-notes
+
