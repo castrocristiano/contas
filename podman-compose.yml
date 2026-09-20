@@ -32,8 +32,13 @@ services:
     depends_on:
       db:
         condition: service_healthy
+    env_file:
+      - .env
     environment:
       DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-contas}:${POSTGRES_PASSWORD:-contas}@db:5432/${POSTGRES_DB:-contas}
+      OPENAPI_KEY: ${OPENAPI_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAIAPI_KEY: ${OPENAIAPI_KEY:-}
     ports:
       - "8501:8501"
     networks:

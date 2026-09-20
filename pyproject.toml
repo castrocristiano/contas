@@ -18,6 +18,7 @@ dependencies = [
     "sqlmodel>=0.0.21",
     "streamlit>=1.35.0",
     "pypdf>=4.0.0",
+    "fonttools>=4.50.0",
 ]
 
 [project.scripts]
