@@ -342,6 +342,7 @@ def main():
     # -------------------------------------------------------------
     elif menu == "🧾 Importar Fatura PDF":
         from contas.services.invoice_parser import (
+            check_pdf_encrypted,
             extract_text_from_pdf,
             parse_invoice_with_openai,
             refine_items_with_chat,
@@ -382,20 +383,40 @@ def main():
         if "last_processed_file" not in st.session_state:
             st.session_state["last_processed_file"] = None
 
-        if (
-            pdf_file is not None
-            and st.session_state["last_processed_file"] != pdf_file.name
-        ):
+        pdf_password = None
+        is_encrypted = False
+        pdf_bytes = None
+
+        if pdf_file is not None:
+            pdf_bytes = pdf_file.read()
+            pdf_file.seek(0)
+            try:
+                is_encrypted = check_pdf_encrypted(pdf_bytes)
+            except Exception:  # noqa: BLE001
+                is_encrypted = False
+
+            if is_encrypted:
+                st.info("🔒 Este arquivo PDF está protegido por senha.")
+                pdf_password = st.text_input(
+                    "Digite a senha para abrir a fatura (ex: primeiros dígitos do CPF, etc.)",
+                    type="password",
+                    key=f"pdf_pwd_{pdf_file.name}",
+                )
+
+        # Só processa se não for criptografado OU se a senha tiver sido preenchida
+        can_process = pdf_file is not None and (not is_encrypted or bool(pdf_password))
+        process_key = f"{pdf_file.name}:{pdf_password}" if pdf_file else None
+
+        if can_process and st.session_state["last_processed_file"] != process_key:
             with st.spinner("Lendo arquivo PDF e extraindo compras com OpenAI..."):
                 try:
-                    pdf_bytes = pdf_file.read()
-                    raw_text = extract_text_from_pdf(pdf_bytes)
+                    raw_text = extract_text_from_pdf(pdf_bytes, password=pdf_password)
                     parsed_container = parse_invoice_with_openai(
                         raw_text, categories=category_names
                     )
                     items_dicts = [item.model_dump() for item in parsed_container.items]
                     st.session_state["invoice_items"] = items_dicts
-                    st.session_state["last_processed_file"] = pdf_file.name
+                    st.session_state["last_processed_file"] = process_key
                     st.session_state["chat_history"] = [
                         {
                             "role": "assistant",
@@ -403,7 +424,7 @@ def main():
                         }
                     ]
                     st.success(
-                        f"Fatura processada! {len(items_dicts)} despesas encontradas."
+                        f"Fatura processada com sucesso! {len(items_dicts)} despesas encontradas."
                     )
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"Erro ao processar fatura: {exc}")

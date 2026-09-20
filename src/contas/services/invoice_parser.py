@@ -65,9 +65,24 @@ class ChatRefinementContainer(BaseModel):
     )
 
 
-def extract_text_from_pdf(pdf_bytes: bytes) -> str:
-    """Extract raw text from PDF bytes using pypdf."""
+def check_pdf_encrypted(pdf_bytes: bytes) -> bool:
+    """Check if the PDF is encrypted and requires a password."""
     reader = PdfReader(io.BytesIO(pdf_bytes))
+    return bool(reader.is_encrypted)
+
+
+def extract_text_from_pdf(pdf_bytes: bytes, password: str | None = None) -> str:
+    """Extract raw text from PDF bytes using pypdf, with optional password for encrypted files."""
+    reader = PdfReader(io.BytesIO(pdf_bytes))
+    if reader.is_encrypted:
+        if not password:
+            raise ValueError(
+                "O arquivo PDF está protegido por senha. Por favor, informe a senha da fatura."
+            )
+        decrypt_result = reader.decrypt(password)
+        if decrypt_result == 0:
+            raise ValueError("Senha incorreta para abrir o arquivo PDF da fatura.")
+
     pages_text: list[str] = []
     for idx, page in enumerate(reader.pages):
         text = page.extract_text()
