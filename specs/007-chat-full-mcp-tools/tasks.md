@@ -32,3 +32,4 @@
   - [x] 5.2 Executar `uv run pytest -v` (79 testes passando)
   - [x] 5.3 Atualizar tasks.md e documentação SDD
   - [x] 5.4 Commit e push na branch `feature/007-chat-full-mcp-tools`
+

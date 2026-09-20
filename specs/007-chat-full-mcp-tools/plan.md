@@ -63,3 +63,4 @@ flowchart TD
 ## 3. Plano de Verificação
 - `uv run ruff check . && uv run ruff format --check .`
 - `uv run pytest -v` (todos os testes passando com mocks).
+
