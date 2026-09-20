@@ -1,7 +1,11 @@
 import asyncio
 from uuid import UUID
 
-from contas.schemas.account import CreateAccountInput, ListAccountsInput
+from contas.schemas.account import (
+    CreateAccountInput,
+    DeleteAccountInput,
+    ListAccountsInput,
+)
 from contas.schemas.budget import GetBudgetStatusInput, SetBudgetInput
 from contas.schemas.category import CreateCategoryInput, ListCategoriesInput
 from contas.schemas.transaction import (
@@ -55,6 +59,19 @@ class UIService:
                     name=name,
                     account_type=account_type,
                     initial_balance=initial_balance,
+                )
+            )
+        )
+
+    @staticmethod
+    def delete_account(account_id: UUID, force_cascade: bool = False) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["delete_account"].fn
+        return run_async(
+            handler(
+                payload=DeleteAccountInput(
+                    account_id=account_id,
+                    force_cascade=force_cascade,
                 )
             )
         )

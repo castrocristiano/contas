@@ -467,6 +467,59 @@ def main():
                         st.success(f"Categoria '{cat_name}' criada!")
                         st.rerun()
 
+        st.divider()
+
+        # Gerenciamento e Exclusão de Contas
+        st.subheader("🗑️ Gerenciar e Excluir Contas")
+        accounts_data = UIService.list_accounts()
+        all_accounts = accounts_data.get("accounts", [])
+
+        if not all_accounts:
+            st.info("Nenhuma conta cadastrada.")
+        else:
+            with st.container(border=True):
+                st.caption(
+                    "Exclua contas sem movimentação ou desative contas existentes para manter seu histórico íntegro."
+                )
+                acc_options = {
+                    f"{a['name']} ({a['account_type'].upper()}) - Saldo: {format_currency(a['balance'])} [{a['id'][:8]}]": a
+                    for a in all_accounts
+                }
+                selected_acc_label = st.selectbox(
+                    "Selecione a conta para excluir/desativar",
+                    options=list(acc_options.keys()),
+                    key="select_acc_delete",
+                )
+
+                if selected_acc_label:
+                    target_acc = acc_options[selected_acc_label]
+                    force_cascade = st.checkbox(
+                        "⚠️ Excluir permanentemente do banco junto com todo o histórico de transações (Cascade)",
+                        value=False,
+                        help="Se desmarcado e a conta tiver movimentações, ela será apenas desativada (soft-delete), preservando seus registros históricos.",
+                    )
+
+                    if st.button(
+                        "Confirmar Exclusão da Conta",
+                        type="primary",
+                        key="btn_delete_acc_confirm",
+                    ):
+                        del_acc_res = UIService.delete_account(
+                            account_id=UUID(target_acc["id"]),
+                            force_cascade=force_cascade,
+                        )
+                        if "error" in del_acc_res:
+                            st.error(
+                                f"Erro ao excluir conta: {del_acc_res['error']['message']}"
+                            )
+                        else:
+                            st.success(
+                                del_acc_res.get(
+                                    "message", "Conta processada com sucesso!"
+                                )
+                            )
+                            st.rerun()
+
 
 if __name__ == "__main__":
     main()
