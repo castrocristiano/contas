@@ -163,6 +163,7 @@ O servidor expõe as seguintes ferramentas em conformidade com o protocolo MCP:
 - `get_budget_status`: Consulta o status de execução orçamentária e consumo por período.
 - `get_installment_plan`: Consulta o plano detalhado de uma compra parcelada, progresso de quitação e parcelas futuras.
 - `delete_transaction`: Exclui uma transação (despesa, receita, transferência ou parcela) estornando os saldos afetados e suportando exclusão de planos parcelados completos.
+- `delete_account`: Exclui uma conta sem movimentações ou desativa-a (soft-delete), com opção de exclusão em cascata.
 - `health_check`: Verifica o status operacional do servidor MCP e conexão com PostgreSQL.
 
 Para detalhes de schemas de entrada e saída, consulte os contratos em [001-core-infra-mcp](specs/001-core-infra-mcp/contracts/mcp-tools.md), [002-categories-and-budgets](specs/002-categories-and-budgets/contracts/mcp-tools.md) e [003-installment-purchases](specs/003-installment-purchases/spec.md).
