@@ -22,12 +22,12 @@ flowchart TD
 ### A. Serviço de Chat
 
 **`src/contas/services/financial_chat.py`** (novo):
-- `_TOOLS: list[dict]` — schemas JSON de 6 ferramentas para o model.
+- `_TOOLS: list[dict]` — schemas JSON de 7 ferramentas para o model (5 leitura + `record_transaction` + `create_account`).
 - `@dataclass PendingAction` — representa ação de escrita pendente de confirmação.
 - `chat_with_financial_assistant(messages, client, model) -> (reply, PendingAction | None)` — loop agentic com até 6 iterações.
-- `execute_pending_action(pending) -> dict` — executa ação confirmada pelo usuário.
+- `execute_pending_action(pending) -> dict` — executa ação confirmada (`record_transaction` ou `create_account`).
 - `_execute_read_tool(name, args, accounts, categories) -> str` — despacha ferramentas de leitura.
-- `_build_action_summary(name, args, ...) -> str` — gera texto legível para o bloco de confirmação.
+- `_build_action_summary(name, args, ...) -> str` — gera texto legível para confirmação de `record_transaction` e `create_account`.
 
 ### B. Interface Streamlit
 
@@ -68,3 +68,4 @@ Nenhuma nova dependência externa — `openai` e `streamlit` já presentes.
 4. Seção de chat no `app.py` → interface.
 5. Ruff + pytest → validação final.
 6. Commit e push na branch `feature/006-financial-chat`.
+
