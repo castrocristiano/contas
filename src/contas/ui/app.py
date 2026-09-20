@@ -159,7 +159,7 @@ def main():
                             }
                         )
                     st.dataframe(
-                        pd.DataFrame(df_data), use_container_width=True, hide_index=True
+                        pd.DataFrame(df_data), width="stretch", hide_index=True
                     )
 
                     # Ações de Gerenciamento / Exclusão
@@ -500,7 +500,7 @@ def main():
 
             edited_df = st.data_editor(
                 pd.DataFrame(df_import),
-                use_container_width=True,
+                width="stretch",
                 hide_index=True,
                 column_config={
                     "Importar": st.column_config.CheckboxColumn(
