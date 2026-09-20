@@ -24,6 +24,22 @@ def test_extracted_invoice_item_schema():
     assert item.installment_total == 3
 
 
+def test_effective_openai_api_key_fallbacks():
+    from contas.config import Settings
+
+    # 1. Test openapi_key takes precedence or falls back seamlessly
+    s1 = Settings(openapi_key="key_openapi", openai_api_key="key_openai_api")
+    assert s1.effective_openai_api_key == "key_openapi"
+
+    # 2. Test fallback to openai_api_key
+    s2 = Settings(openapi_key="", openai_api_key="key_openai_api")
+    assert s2.effective_openai_api_key == "key_openai_api"
+
+    # 3. Test fallback to openaiapi_key
+    s3 = Settings(openapi_key="", openai_api_key="", openaiapi_key="key_openaiapi")
+    assert s3.effective_openai_api_key == "key_openaiapi"
+
+
 def test_parse_invoice_with_openai_mock():
     mock_client = MagicMock()
     mock_parsed = InvoiceExtractionContainer(
