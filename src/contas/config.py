@@ -10,7 +10,12 @@ class Settings(BaseSettings):
 
     database_url: str = "postgresql+psycopg://contas:contas@localhost:5432/contas"
     openai_api_key: str = ""
+    openapi_key: str = ""
     debug: bool = False
+
+    @property
+    def effective_openai_api_key(self) -> str:
+        return self.openapi_key or self.openai_api_key
 
 
 settings = Settings()

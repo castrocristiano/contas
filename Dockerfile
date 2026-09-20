@@ -1,22 +1,32 @@
 FROM python:3.12-slim
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
+# Install uv from the official Astral image
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
+
+# Set environment variables
+ENV UV_COMPILE_BYTECODE=1 \
+    UV_LINK_MODE=copy \
+    PYTHONUNBUFFERED=1 \
+    STREAMLIT_SERVER_HEADLESS=true \
+    STREAMLIT_SERVER_ENABLE_CORS=false \
+    STREAMLIT_SERVER_ENABLE_XSRF_PROTECTION=false
 
 WORKDIR /app
 
-# Copy dependency files first for better layer caching
-COPY pyproject.toml uv.lock ./
+# First, install project dependencies (for efficient Docker caching)
+COPY pyproject.toml uv.lock README.md ./
+RUN uv sync --frozen --no-dev --no-install-project
 
-# Install dependencies (no dev deps in production image)
+# Copy application source, migrations and entrypoint
+COPY src ./src
+COPY migrations ./migrations
+COPY alembic.ini ./alembic.ini
+COPY entrypoint.sh ./entrypoint.sh
+
+# Install the application itself
 RUN uv sync --frozen --no-dev
 
-# Copy source code
-COPY src/ ./src/
+# Expose Streamlit port
+EXPOSE 8501
 
-# Run as non-root user
-RUN useradd --create-home --shell /bin/bash appuser
-USER appuser
-
-# MCP server via stdio — no port exposed by default
-CMD ["uv", "run", "python", "-m", "contas"]
+ENTRYPOINT ["./entrypoint.sh"]

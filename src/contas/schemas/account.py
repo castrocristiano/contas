@@ -69,3 +69,25 @@ class ListAccountsResponse(BaseModel):
     total_balance: str
     currency: str
     count: int
+
+
+class DeleteAccountInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: UUID = Field(
+        ...,
+        description="UUID of the account to delete or deactivate.",
+    )
+    force_cascade: bool = Field(
+        default=False,
+        description="If true, removes the account and all related transactions. If false and transactions exist, deactivates the account.",
+    )
+
+
+class DeleteAccountResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: UUID
+    name: str
+    action_taken: str  # "deleted" | "deactivated"
+    message: str

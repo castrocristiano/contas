@@ -12,6 +12,8 @@ from contas.models.account import Account
 from contas.models.category import Category
 from contas.models.transaction import Transaction, TransactionStatus, TransactionType
 from contas.schemas.transaction import (
+    DeleteTransactionInput,
+    DeleteTransactionResponse,
     FinancialSummaryAccountItem,
     FinancialSummaryResponse,
     GetFinancialSummaryInput,
@@ -35,6 +37,7 @@ from contas.tools.errors import (
     DatabaseError,
     InstallmentPlanNotFoundError,
     IntegrityError,
+    TransactionNotFoundError,
     TransferSameAccountError,
 )
 from contas.utils.installments import add_months, calculate_installments
@@ -409,6 +412,71 @@ def register_transaction_tools(mcp: MCPServer) -> None:
                 currency=currency,
             )
             return response.model_dump(mode="json")
+        except ContasError as err:
+            return err.to_dict()
+        except DBAPIError as err:
+            return DatabaseError(str(err.orig or err)).to_dict()
+
+    @mcp.tool()
+    async def delete_transaction(payload: DeleteTransactionInput) -> dict:
+        """Delete a transaction, reverting any cleared amounts to account balances atomically, with support for deleting individual installments or all installments in a plan."""
+        try:
+            async with get_session() as session, session.begin():
+                tx = (
+                    await session.exec(
+                        select(Transaction).where(
+                            Transaction.id == payload.transaction_id
+                        )
+                    )
+                ).first()
+                if not tx:
+                    raise TransactionNotFoundError(str(payload.transaction_id))
+
+                transactions_to_delete: list[Transaction] = []
+                if payload.delete_all_installments and tx.installment_id is not None:
+                    stmt = select(Transaction).where(
+                        Transaction.installment_id == tx.installment_id
+                    )
+                    transactions_to_delete = (await session.exec(stmt)).all()
+                else:
+                    transactions_to_delete = [tx]
+
+                reverted_total = Decimal("0.00")
+
+                # Revert balances for cleared transactions
+                for item in transactions_to_delete:
+                    if item.status == TransactionStatus.CLEARED:
+                        source_account = await session.get(
+                            Account, item.source_account_id
+                        )
+                        if source_account:
+                            if item.transaction_type == TransactionType.EXPENSE:
+                                source_account.balance += item.amount
+                                reverted_total += item.amount
+                            elif item.transaction_type == TransactionType.INCOME:
+                                source_account.balance -= item.amount
+                                reverted_total += item.amount
+                            elif item.transaction_type == TransactionType.TRANSFER:
+                                source_account.balance += item.amount
+                                reverted_total += item.amount
+                                if item.destination_account_id:
+                                    dest_account = await session.get(
+                                        Account, item.destination_account_id
+                                    )
+                                    if dest_account:
+                                        dest_account.balance -= item.amount
+                                        session.add(dest_account)
+                            session.add(source_account)
+
+                    await session.delete(item)
+
+            count = len(transactions_to_delete)
+            return DeleteTransactionResponse(
+                transaction_id=payload.transaction_id,
+                deleted_count=count,
+                reverted_amount=f"{reverted_total:.2f}",
+                message=f"Successfully deleted {count} transaction(s) and reverted R$ {reverted_total:.2f}.",
+            ).model_dump(mode="json")
         except ContasError as err:
             return err.to_dict()
         except DBAPIError as err:

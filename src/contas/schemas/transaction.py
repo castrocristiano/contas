@@ -271,3 +271,25 @@ class InstallmentPlanResponse(BaseModel):
     paid_installments: int
     remaining_installments: int
     installments: list[InstallmentItemResponse]
+
+
+class DeleteTransactionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: UUID = Field(
+        ...,
+        description="UUID of the transaction to delete.",
+    )
+    delete_all_installments: bool = Field(
+        default=False,
+        description="If True and the transaction is part of an installment plan, deletes all installments of that plan.",
+    )
+
+
+class DeleteTransactionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: UUID
+    deleted_count: int
+    reverted_amount: str
+    message: str
