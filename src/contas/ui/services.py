@@ -10,6 +10,7 @@ from contas.schemas.budget import GetBudgetStatusInput, SetBudgetInput
 from contas.schemas.category import CreateCategoryInput, ListCategoriesInput
 from contas.schemas.transaction import (
     DeleteTransactionInput,
+    GetFinancialSummaryInput,
     GetInstallmentPlanInput,
     GetStatementInput,
     RecordTransactionInput,
@@ -152,6 +153,22 @@ class UIService:
                     transaction_date=transaction_date,
                     total_installments=total_installments,
                     total_amount=total_amount,
+                )
+            )
+        )
+
+    @staticmethod
+    def get_financial_summary(
+        month: int | None = None,
+        year: int | None = None,
+    ) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["get_financial_summary"].fn
+        return run_async(
+            handler(
+                payload=GetFinancialSummaryInput(
+                    month=month,
+                    year=year,
                 )
             )
         )

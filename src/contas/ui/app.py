@@ -7,6 +7,11 @@ import streamlit as st
 from contas.models.account import AccountType
 from contas.models.category import CategoryType
 from contas.models.transaction import TransactionType
+from contas.services.financial_chat import (
+    PendingAction,
+    chat_with_financial_assistant,
+    execute_pending_action,
+)
 from contas.ui.services import UIService
 
 # Configuração da Página
@@ -42,6 +47,7 @@ def main():
             "📊 Dashboard & Extrato",
             "➕ Novo Lançamento",
             "🧾 Importar Fatura PDF",
+            "💬 Assistente Financeiro",
             "🎯 Orçamentos & Metas",
             "⚙️ Configurações",
         ],
@@ -568,7 +574,100 @@ def main():
             st.info("Envie um arquivo PDF de fatura acima para iniciar.")
 
     # -------------------------------------------------------------
-    # 4. ORÇAMENTOS & METAS
+    # 4. ASSISTENTE FINANCEIRO (CHAT)
+    # -------------------------------------------------------------
+    elif menu == "💬 Assistente Financeiro":
+        st.title("💬 Assistente Financeiro")
+        st.caption(
+            "Converse em linguagem natural sobre suas finanças. "
+            "Pergunte saldos, extratos, orçamentos ou peça para registrar uma transação."
+        )
+
+        # Sidebar extras
+        if st.sidebar.button("🗑️ Limpar Conversa", key="btn_clear_chat"):
+            st.session_state["financial_chat_history"] = []
+            st.session_state["financial_pending_action"] = None
+            st.rerun()
+
+        # Session state initialisation
+        if "financial_chat_history" not in st.session_state:
+            st.session_state["financial_chat_history"] = []
+        if "financial_pending_action" not in st.session_state:
+            st.session_state["financial_pending_action"] = None
+
+        chat_history: list[dict] = st.session_state["financial_chat_history"]
+        pending: PendingAction | None = st.session_state["financial_pending_action"]
+
+        # Render chat history
+        for msg in chat_history:
+            with st.chat_message(msg["role"]):
+                st.markdown(msg["content"])
+
+        # Confirmation block for pending write actions
+        if pending is not None:
+            with st.container(border=True):
+                st.warning("⚠️ **Confirme a ação abaixo antes de efetivar:**")
+                st.markdown(pending.summary)
+                col_ok, col_cancel, _ = st.columns([1, 1, 4])
+                with col_ok:
+                    if st.button(
+                        "✅ Confirmar", type="primary", key="btn_confirm_pending"
+                    ):
+                        with st.spinner("Registrando transação..."):
+                            result = execute_pending_action(pending)
+                        if "error" in result:
+                            st.error(
+                                f"Erro ao registrar: {result['error'].get('message', result['error'])}"
+                            )
+                        else:
+                            st.success("Transação registrada com sucesso!")
+                            chat_history.append(
+                                {
+                                    "role": "assistant",
+                                    "content": "✅ Transação registrada com sucesso! Posso ajudar com mais alguma coisa?",
+                                }
+                            )
+                        st.session_state["financial_pending_action"] = None
+                        st.rerun()
+                with col_cancel:
+                    if st.button("❌ Cancelar", key="btn_cancel_pending"):
+                        chat_history.append(
+                            {
+                                "role": "assistant",
+                                "content": "Tudo bem, o lançamento foi cancelado. Posso ajudar com mais alguma coisa?",
+                            }
+                        )
+                        st.session_state["financial_pending_action"] = None
+                        st.rerun()
+
+        # Chat input
+        user_input = st.chat_input(
+            "Ex: Qual meu saldo total? / Lance R$ 80 de supermercado na Nubank / Como estão meus orçamentos?"
+        )
+        if user_input:
+            chat_history.append({"role": "user", "content": user_input})
+            with st.chat_message("user"):
+                st.markdown(user_input)
+
+            with st.chat_message("assistant"), st.spinner("Pensando..."):
+                try:
+                    reply, new_pending = chat_with_financial_assistant(
+                        messages=chat_history,
+                    )
+                    st.markdown(reply)
+                    chat_history.append({"role": "assistant", "content": reply})
+                    st.session_state["financial_pending_action"] = new_pending
+                except Exception as exc:  # noqa: BLE001
+                    err_msg = f"Erro ao consultar o assistente: {exc}"
+                    st.error(err_msg)
+                    chat_history.append({"role": "assistant", "content": err_msg})
+
+            st.session_state["financial_chat_history"] = chat_history
+            if st.session_state["financial_pending_action"] is not None:
+                st.rerun()
+
+    # -------------------------------------------------------------
+    # 5. ORÇAMENTOS & METAS
     # -------------------------------------------------------------
     elif menu == "🎯 Orçamentos & Metas":
         st.title("🎯 Acompanhamento Orçamentário")
