@@ -184,3 +184,36 @@ def test_get_financial_summary_input_default():
 
     payload = GetFinancialSummaryInput()
     assert payload.reference_date is None
+
+
+def test_delete_transaction_input_valid():
+    from contas.schemas.transaction import (
+        DeleteTransactionInput,
+        DeleteTransactionResponse,
+    )
+
+    tx_id = uuid4()
+    payload = DeleteTransactionInput(transaction_id=tx_id, delete_all_installments=True)
+    assert payload.transaction_id == tx_id
+    assert payload.delete_all_installments is True
+
+    # Test default
+    payload_default = DeleteTransactionInput(transaction_id=tx_id)
+    assert payload_default.delete_all_installments is False
+
+    # Test response schema
+    resp = DeleteTransactionResponse(
+        transaction_id=tx_id,
+        deleted_count=3,
+        reverted_amount="150.00",
+        message="Deleted 3 transactions",
+    )
+    assert resp.deleted_count == 3
+    assert resp.reverted_amount == "150.00"
+
+
+def test_delete_transaction_input_extra_fields_forbidden():
+    from contas.schemas.transaction import DeleteTransactionInput
+
+    with pytest.raises(ValidationError):
+        DeleteTransactionInput(transaction_id=uuid4(), unexpected=True)

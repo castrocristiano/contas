@@ -100,17 +100,43 @@ O desenvolvimento de novas funcionalidades segue o ciclo do **Spec-Driven Develo
 
 ## 🚀 Como Executar
 
-### 1. Inicializar infraestrutura e banco de dados
+### Opção 1: Execução completa com Docker Compose / Podman Compose (Recomendado)
+
+Sobe o banco PostgreSQL e o frontend Streamlit, aplicando as migrações automaticamente:
 
 ```bash
-# Subir o banco PostgreSQL via podman-compose
-podman-compose up -d
+# Com Docker Compose
+docker compose up --build -d
 
-# Executar as migrações do banco com Alembic
-uv run alembic upgrade head
+# Ou com Podman Compose
+podman-compose up --build -d
 ```
 
-### 2. Iniciar o Servidor MCP
+Acesse a interface web em **http://localhost:8501**.
+
+Para parar os serviços:
+```bash
+docker compose down
+# ou
+podman-compose down
+```
+
+### Opção 2: Execução Manual / Desenvolvimento Local
+
+```bash
+# 1. Subir apenas o banco de dados PostgreSQL
+docker compose up db -d
+# ou
+podman-compose up db -d
+
+# 2. Executar as migrações do banco com Alembic
+uv run alembic upgrade head
+
+# 3. Iniciar a Interface Web (Streamlit Frontend)
+uv run streamlit run src/contas/ui/app.py
+```
+
+### Iniciar o Servidor MCP
 
 ```bash
 # Modo inspeção interativa via browser (MCP Inspector)
@@ -136,6 +162,7 @@ O servidor expõe as seguintes ferramentas em conformidade com o protocolo MCP:
 - `set_budget`: Define ou atualiza o teto orçamentário mensal para uma categoria de despesa.
 - `get_budget_status`: Consulta o status de execução orçamentária e consumo por período.
 - `get_installment_plan`: Consulta o plano detalhado de uma compra parcelada, progresso de quitação e parcelas futuras.
+- `delete_transaction`: Exclui uma transação (despesa, receita, transferência ou parcela) estornando os saldos afetados e suportando exclusão de planos parcelados completos.
 - `health_check`: Verifica o status operacional do servidor MCP e conexão com PostgreSQL.
 
 Para detalhes de schemas de entrada e saída, consulte os contratos em [001-core-infra-mcp](specs/001-core-infra-mcp/contracts/mcp-tools.md), [002-categories-and-budgets](specs/002-categories-and-budgets/contracts/mcp-tools.md) e [003-installment-purchases](specs/003-installment-purchases/spec.md).
