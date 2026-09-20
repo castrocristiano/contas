@@ -16,7 +16,23 @@ class Settings(BaseSettings):
 
     @property
     def effective_openai_api_key(self) -> str:
-        return self.openapi_key or self.openai_api_key or self.openaiapi_key
+        import os
+        from pathlib import Path
+
+        key = (
+            self.openapi_key
+            or self.openai_api_key
+            or self.openaiapi_key
+            or os.getenv("OPENAPI_KEY", "")
+            or os.getenv("OPENAI_API_KEY", "")
+            or os.getenv("OPENAIAPI_KEY", "")
+        )
+        if not key:
+            key_file = Path.home() / ".openai_key"
+            if key_file.is_file():
+                key = key_file.read_text(encoding="utf-8").strip()
+
+        return key
 
 
 settings = Settings()
