@@ -257,6 +257,41 @@ def test_execute_read_tool_list_accounts():
     assert data["accounts"][0]["name"] == "Nubank"
 
 
+def test_execute_read_tool_get_statement_defaults():
+    """_execute_read_tool for get_statement handles empty dates by defaulting to a broad range."""
+    import json
+    from uuid import UUID
+
+    accounts = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "Cartão Mãe",
+            "balance": "-53.97",
+        }
+    ]
+
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.get_statement.return_value = {
+            "account": {"name": "Cartão Mãe"},
+            "transactions": [{"id": "tx1", "description": "PICPAY", "amount": "32.99"}],
+        }
+
+        result = _execute_read_tool(
+            "get_statement",
+            {"account_name": "Cartão Mãe"},
+            accounts=accounts,
+            categories=[],
+        )
+
+    mock_ui.get_statement.assert_called_once()
+    call_kwargs = mock_ui.get_statement.call_args.kwargs
+    assert call_kwargs["account_id"] == UUID("00000000-0000-0000-0000-000000000001")
+    assert "start_date" in call_kwargs
+    assert "end_date" in call_kwargs
+    data = json.loads(result)
+    assert len(data["transactions"]) == 1
+
+
 def test_chat_raises_without_api_key():
     """chat_with_financial_assistant raises ValueError when no API key is configured."""
     with patch("contas.services.financial_chat.settings") as mock_settings:

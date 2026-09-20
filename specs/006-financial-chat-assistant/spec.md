@@ -4,7 +4,7 @@
 
 **Created**: 2026-09-20
 
-**Status**: Draft
+**Status**: Implemented ✅
 
 **Input**: Sessão de chat com IA na tela principal do app Streamlit para consultar e interagir com as finanças do usuário em linguagem natural.
 
@@ -62,12 +62,29 @@ Para monitorar metas de gastos sem sair da tela principal.
 
 ---
 
+### User Story 4 — Criação de Conta Financeira via Chat com Confirmação (Priority: P2)
+
+Como usuário,  
+Quero pedir ao assistente para criar uma nova conta financeira (ex: "Crie uma conta com nome de Contas Mãe"),  
+Para que o sistema proponha a criação com um resumo legível e eu confirme com um clique antes de persistir.
+
+**Why this priority**: Completa o ciclo de gestão financeira no chat, permitindo setup inicial e adição de contas sem sair da tela.
+
+**Independent Test**: Pedir ao assistente "Crie uma conta corrente chamada Contas Mãe" e verificar que aparece um bloco de confirmação com nome, tipo e saldo inicial; ao confirmar, a conta é criada.
+
+**Acceptance Scenarios**:
+1. **Given** o usuário digita "Crie uma conta com nome de Contas Mãe", **When** o assistente interpreta a instrução, **Then** exibe um bloco de confirmação com nome, tipo e saldo inicial antes de efetivar.
+2. **Given** o bloco de confirmação exibido, **When** o usuário clica em "Confirmar", **Then** `create_account` é chamado e a conta aparece na listagem.
+3. **Given** o bloco de confirmação exibido, **When** o usuário clica em "Cancelar", **Then** nenhuma conta é criada e o chat continua normalmente.
+
+---
+
 ## Requisitos
 
 ### Requisitos Funcionais
 
-- **RF-001**: O chat DEVE usar OpenAI function calling (não Structured Outputs) com ferramentas mapeadas para `list_accounts`, `list_categories`, `get_financial_summary`, `get_statement`, `get_budget_status` e `record_transaction`.
-- **RF-002**: Ações de escrita (`record_transaction`) DEVEM passar por confirmação explícita do usuário antes de serem executadas — o assistente não pode persistir dados sem interação.
+- **RF-001**: O chat DEVE usar OpenAI function calling (não Structured Outputs) com ferramentas mapeadas para `list_accounts`, `list_categories`, `get_financial_summary`, `get_statement`, `get_budget_status`, `record_transaction` e `create_account`.
+- **RF-002**: Ações de escrita (`record_transaction`, `create_account`) DEVEM passar por confirmação explícita do usuário antes de serem executadas — o assistente não pode persistir dados sem interação.
 - **RF-003**: O histórico de conversa DEVE ser mantido no `st.session_state` e limpo ao resetar a sessão.
 - **RF-004**: Respostas do assistente DEVEM ser sempre em Português do Brasil.
 - **RF-005**: O módulo de chat DEVE aceitar um `client: OpenAI | None` injetável para facilitar testes com mocks.
@@ -85,10 +102,11 @@ Para monitorar metas de gastos sem sair da tela principal.
 - **API key ausente**: Exibir mensagem amigável em PT-BR pedindo para configurar a chave.
 - **Pergunta ambígua de conta**: Se o usuário mencionar uma conta que não existe, o assistente pergunta qual das contas disponíveis usar.
 - **Loop de tool calls**: O loop agentic é limitado a 6 iterações para evitar consumo excessivo de tokens.
+- **Tipo de conta não especificado**: Se o usuário não informar o tipo ao criar uma conta, o assistente infere `checking` (corrente) como padrão.
 
 ## Critérios de Sucesso
 
 - **CS-001**: O assistente responde corretamente a perguntas de saldo e extrato usando dados reais do banco.
-- **CS-002**: Toda ação de escrita passa pela tela de confirmação — zero persistências silenciosas.
-- **CS-003**: 100% dos testes unitários passam usando mocks.
+- **CS-002**: Toda ação de escrita (`record_transaction`, `create_account`) passa pela tela de confirmação — zero persistências silenciosas.
+- **CS-003**: 100% dos testes unitários passam usando mocks (72 testes totais na suíte).
 - **CS-004**: Nenhum aviso de depreciação ou erro de linting novo introduzido.
