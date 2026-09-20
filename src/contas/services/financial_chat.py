@@ -232,6 +232,135 @@ _TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_category",
+            "description": (
+                "Cria uma nova categoria financeira para receitas ou despesas."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Nome da categoria (ex: 'Educação', 'Lazer', 'Freelance').",
+                    },
+                    "category_type": {
+                        "type": "string",
+                        "enum": ["income", "expense"],
+                        "description": "Tipo da categoria: 'income' para receita, 'expense' para despesa.",
+                    },
+                },
+                "required": ["name", "category_type"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "set_budget",
+            "description": (
+                "Define ou atualiza o limite mensal de orçamento para uma categoria de despesa específica."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category_name": {
+                        "type": "string",
+                        "description": "Nome da categoria de despesa.",
+                    },
+                    "amount": {
+                        "type": "string",
+                        "description": "Limite monetário mensal em decimal positivo com ponto (ex: '600.00').",
+                    },
+                    "month": {
+                        "type": "integer",
+                        "description": "Mês de referência (1-12). Padrão: mês atual.",
+                    },
+                    "year": {
+                        "type": "integer",
+                        "description": "Ano de referência (ex: 2026). Padrão: ano atual.",
+                    },
+                },
+                "required": ["category_name", "amount"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_installment_plan",
+            "description": (
+                "Recupera o cronograma completo de um parcelamento pelo seu ID (installment_id), "
+                "detalhando parcelas pagas, parcelas restantes, valores e datas de vencimento."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "installment_id": {
+                        "type": "string",
+                        "description": "UUID do parcelamento (encontrado nos detalhes da transação).",
+                    },
+                },
+                "required": ["installment_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_transaction",
+            "description": (
+                "Exclui uma transação financeira. Se a transação estiver liquidada, o saldo será estornado automaticamente. "
+                "Para compras parceladas, pode excluir apenas a parcela ou todas as parcelas do plano."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "transaction_id": {
+                        "type": "string",
+                        "description": "UUID da transação a ser excluída.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Breve descrição ou motivo para conferência pelo usuário.",
+                    },
+                    "delete_all_installments": {
+                        "type": "boolean",
+                        "description": "Se True e for compra parcelada, exclui todas as parcelas do plano. Padrão: False.",
+                        "default": False,
+                    },
+                },
+                "required": ["transaction_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "delete_account",
+            "description": (
+                "Exclui uma conta financeira se não houver transações, ou a desativa (soft-delete). "
+                "Se force_cascade for True, remove todas as transações associadas e deleta a conta."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_name": {
+                        "type": "string",
+                        "description": "Nome da conta a ser excluída/desativada.",
+                    },
+                    "force_cascade": {
+                        "type": "boolean",
+                        "description": "Se True, força a exclusão em cascata de todas as transações vinculadas.",
+                        "default": False,
+                    },
+                },
+                "required": ["account_name"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -317,6 +446,15 @@ def _execute_read_tool(
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
+    if name == "get_installment_plan":
+        from uuid import UUID
+
+        inst_id = args.get("installment_id")
+        if not inst_id:
+            return json.dumps({"error": "Parâmetro 'installment_id' é obrigatório."})
+        result = UIService.get_installment_plan(installment_id=UUID(inst_id))
+        return json.dumps(result, ensure_ascii=False, default=str)
+
     return json.dumps({"error": f"Ferramenta desconhecida: {name}"})
 
 
@@ -378,6 +516,53 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             initial_balance=args.get("initial_balance", "0.00"),
         )
 
+    if pending.tool_name == "create_category":
+        return UIService.create_category(
+            name=args["name"],
+            category_type=args["category_type"],
+        )
+
+    if pending.tool_name == "set_budget":
+        cat_name = args.get("category_name", "")
+        category = next(
+            (c for c in pending.categories if cat_name.lower() in c["name"].lower()),
+            None,
+        )
+        if not category:
+            return {"error": {"message": f"Categoria '{cat_name}' não encontrada."}}
+
+        month = args.get("month") or now.month
+        year = args.get("year") or now.year
+
+        return UIService.set_budget(
+            category_id=UUID(category["id"]),
+            amount=args["amount"],
+            month=month,
+            year=year,
+        )
+
+    if pending.tool_name == "delete_transaction":
+        tx_id_str = args.get("transaction_id")
+        if not tx_id_str:
+            return {"error": {"message": "ID da transação não fornecido."}}
+        return UIService.delete_transaction(
+            transaction_id=UUID(tx_id_str),
+            delete_all_installments=args.get("delete_all_installments", False),
+        )
+
+    if pending.tool_name == "delete_account":
+        acc_name = args.get("account_name", "")
+        account = next(
+            (a for a in pending.accounts if acc_name.lower() in a["name"].lower()),
+            None,
+        )
+        if not account:
+            return {"error": {"message": f"Conta '{acc_name}' não encontrada."}}
+        return UIService.delete_account(
+            account_id=UUID(account["id"]),
+            force_cascade=args.get("force_cascade", False),
+        )
+
     return {"error": {"message": f"Ação desconhecida: {pending.tool_name}"}}
 
 
@@ -431,6 +616,49 @@ def _build_action_summary(
             f"Criar conta **{args.get('name', '?')}** | "
             f"Tipo: {acc_type_label} | Saldo inicial: {initial_fmt}"
         )
+    if name == "create_category":
+        c_type = "Receita" if args.get("category_type") == "income" else "Despesa"
+        return f"Criar categoria de {c_type}: **{args.get('name', '?')}**"
+
+    if name == "set_budget":
+        try:
+            b_amount = (
+                f"R$ {float(args.get('amount', '0')):,.2f}".replace(",", "X")
+                .replace(".", ",")
+                .replace("X", ".")
+            )
+        except ValueError:
+            b_amount = f"R$ {args.get('amount', '?')}"
+        m = args.get("month") or datetime.now(UTC).month
+        y = args.get("year") or datetime.now(UTC).year
+        return (
+            f"Definir orçamento para **{args.get('category_name', '?')}** em **{b_amount}** "
+            f"para o mês **{m:02d}/{y}**"
+        )
+
+    if name == "delete_transaction":
+        inst_note = (
+            " (todas as parcelas vinculadas)"
+            if args.get("delete_all_installments")
+            else ""
+        )
+        desc = (
+            args.get("description") or f"ID `{args.get('transaction_id', '')[:8]}...`"
+        )
+        return (
+            f"🗑️ **Excluir lançamento**: {desc}{inst_note}\n\n"
+            f"*Atenção: Se o lançamento for liquidado, o saldo da conta será estornado automaticamente.*"
+        )
+
+    if name == "delete_account":
+        force = args.get("force_cascade", False)
+        force_note = (
+            " ⚠️ **ATENÇÃO: Todas as transações da conta serão excluídas permanentemente!**"
+            if force
+            else " (desativação ou remoção se sem lançamentos)"
+        )
+        return f"🗑️ **Excluir/Desativar conta**: **{args.get('account_name', '?')}**{force_note}"
+
     return f"Ação: `{name}` com argumentos `{args}`"
 
 
@@ -440,20 +668,31 @@ def _build_action_summary(
 
 SYSTEM_PROMPT = """\
 Você é o **Contas Assistant**, um assistente financeiro pessoal inteligente e simpático.
-Você tem acesso às finanças do usuário: contas, saldos, extratos, categorias e orçamentos.
+Você tem acesso e controle completo sobre as finanças do usuário: contas, saldos, extratos, categorias e orçamentos.
 
 Diretrizes:
 - Responda sempre em Português do Brasil.
 - Seja conciso mas completo. Use markdown quando útil (listas, negrito, tabelas simples).
 - Para consultas de extrato e transações de uma conta, use a ferramenta `get_statement`. Se o usuário não especificar datas, use um período amplo (ou deixe sem datas) para capturar lançamentos passados, presentes ou futuros (como compras parceladas ou faturas com datas futuras).
 - Se o saldo de uma conta estiver diferente de zero, sempre consulte o extrato dela antes de afirmar que não há transações.
-- Para criar contas (create_account) ou registrar transações (record_transaction), o sistema exibirá uma tela de confirmação — não execute sem ela.
+- Para consultas de plano de parcelamento, use `get_installment_plan` informando o `installment_id`.
+- Para qualquer alteração ou exclusão de dados (`create_account`, `create_category`, `set_budget`, `record_transaction`, `delete_transaction`, `delete_account`), o sistema SEMPRE exigirá confirmação do usuário na interface antes de efetivar.
+- Se o usuário pedir para excluir um lançamento por descrição ou valor (sem saber o ID), primeiro consulte `get_statement` para obter o `id` da transação antes de propor a ação `delete_transaction`.
 - Formate valores monetários sempre como R$ X.XXX,XX (padrão brasileiro).
 - Se dados de ferramentas contiverem um campo "error", informe o usuário de forma amigável.
 - Se o usuário pedir algo que não é possível com os dados disponíveis, explique gentilmente.
 """
 
-_WRITE_TOOLS: frozenset[str] = frozenset({"record_transaction", "create_account"})
+_WRITE_TOOLS: frozenset[str] = frozenset(
+    {
+        "record_transaction",
+        "create_account",
+        "create_category",
+        "set_budget",
+        "delete_transaction",
+        "delete_account",
+    }
+)
 
 
 # ---------------------------------------------------------------------------

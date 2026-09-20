@@ -299,3 +299,155 @@ def test_chat_raises_without_api_key():
 
         with pytest.raises(ValueError, match="Chave da OpenAI"):
             chat_with_financial_assistant(messages=[{"role": "user", "content": "Olá"}])
+
+
+def test_execute_read_tool_get_installment_plan():
+    import json
+    from uuid import UUID
+
+    inst_uuid = "11111111-1111-1111-1111-111111111111"
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.get_installment_plan.return_value = {
+            "installment_id": inst_uuid,
+            "description": "Notebook",
+            "total_installments": 10,
+            "paid_installments": 3,
+            "remaining_installments": 7,
+        }
+
+        res = _execute_read_tool(
+            "get_installment_plan",
+            {"installment_id": inst_uuid},
+            accounts=[],
+            categories=[],
+        )
+
+    mock_ui.get_installment_plan.assert_called_once_with(installment_id=UUID(inst_uuid))
+    data = json.loads(res)
+    assert data["total_installments"] == 10
+
+
+def test_execute_pending_action_create_category():
+    pending = PendingAction(
+        tool_name="create_category",
+        arguments={"name": "Lazer", "category_type": "expense"},
+        summary="Criar categoria de Despesa: **Lazer**",
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.create_category.return_value = {"id": "cat-1", "name": "Lazer"}
+        res = execute_pending_action(pending)
+
+    mock_ui.create_category.assert_called_once_with(
+        name="Lazer", category_type="expense"
+    )
+    assert res["name"] == "Lazer"
+
+
+def test_execute_pending_action_set_budget():
+    from uuid import UUID
+
+    cat_id = "22222222-2222-2222-2222-222222222222"
+    categories = [{"id": cat_id, "name": "Alimentação"}]
+    pending = PendingAction(
+        tool_name="set_budget",
+        arguments={
+            "category_name": "Alimentação",
+            "amount": "800.00",
+            "month": 9,
+            "year": 2026,
+        },
+        summary="Definir orçamento",
+        categories=categories,
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.set_budget.return_value = {"id": "b-1", "amount": "800.00"}
+        res = execute_pending_action(pending)
+
+    mock_ui.set_budget.assert_called_once_with(
+        category_id=UUID(cat_id),
+        amount="800.00",
+        month=9,
+        year=2026,
+    )
+    assert res["amount"] == "800.00"
+
+
+def test_execute_pending_action_delete_transaction():
+    from uuid import UUID
+
+    tx_id = "33333333-3333-3333-3333-333333333333"
+    pending = PendingAction(
+        tool_name="delete_transaction",
+        arguments={"transaction_id": tx_id, "delete_all_installments": True},
+        summary="Excluir lançamento",
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.delete_transaction.return_value = {
+            "message": "Lançamento excluído com sucesso!"
+        }
+        res = execute_pending_action(pending)
+
+    mock_ui.delete_transaction.assert_called_once_with(
+        transaction_id=UUID(tx_id),
+        delete_all_installments=True,
+    )
+    assert "excluído" in res["message"]
+
+
+def test_execute_pending_action_delete_account():
+    from uuid import UUID
+
+    acc_id = "44444444-4444-4444-4444-444444444444"
+    accounts = [{"id": acc_id, "name": "Conta Teste"}]
+    pending = PendingAction(
+        tool_name="delete_account",
+        arguments={"account_name": "Conta Teste", "force_cascade": False},
+        summary="Excluir/Desativar conta",
+        accounts=accounts,
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.delete_account.return_value = {
+            "message": "Conta desativada com sucesso!"
+        }
+        res = execute_pending_action(pending)
+
+    mock_ui.delete_account.assert_called_once_with(
+        account_id=UUID(acc_id),
+        force_cascade=False,
+    )
+    assert "desativada" in res["message"]
+
+
+def test_build_action_summary_all_write_tools():
+    s_cat = _build_action_summary(
+        "create_category", {"name": "Mercado", "category_type": "expense"}, [], []
+    )
+    assert "Mercado" in s_cat and "Despesa" in s_cat
+
+    s_bud = _build_action_summary(
+        "set_budget",
+        {"category_name": "Lazer", "amount": "500.00", "month": 10, "year": 2026},
+        [],
+        [],
+    )
+    assert "Lazer" in s_bud and "500,00" in s_bud and "10/2026" in s_bud
+
+    s_del_tx = _build_action_summary(
+        "delete_transaction",
+        {
+            "transaction_id": "tx12345678",
+            "description": "Gasolina",
+            "delete_all_installments": False,
+        },
+        [],
+        [],
+    )
+    assert "Gasolina" in s_del_tx and "estornado" in s_del_tx
+
+    s_del_acc = _build_action_summary(
+        "delete_account",
+        {"account_name": "Nubank Antiga", "force_cascade": True},
+        [],
+        [],
+    )
+    assert "Nubank Antiga" in s_del_acc and "ATENÇÃO" in s_del_acc

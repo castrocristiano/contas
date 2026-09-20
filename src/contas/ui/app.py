@@ -613,18 +613,21 @@ def main():
                     if st.button(
                         "✅ Confirmar", type="primary", key="btn_confirm_pending"
                     ):
-                        with st.spinner("Registrando transação..."):
+                        with st.spinner("Processando operação..."):
                             result = execute_pending_action(pending)
                         if "error" in result:
                             st.error(
-                                f"Erro ao registrar: {result['error'].get('message', result['error'])}"
+                                f"Erro ao processar: {result['error'].get('message', result['error'])}"
                             )
                         else:
-                            st.success("Transação registrada com sucesso!")
+                            success_msg = result.get(
+                                "message", "Operação realizada com sucesso!"
+                            )
+                            st.success(success_msg)
                             chat_history.append(
                                 {
                                     "role": "assistant",
-                                    "content": "✅ Transação registrada com sucesso! Posso ajudar com mais alguma coisa?",
+                                    "content": f"✅ {success_msg} Posso ajudar com mais alguma coisa?",
                                 }
                             )
                         st.session_state["financial_pending_action"] = None
@@ -634,7 +637,7 @@ def main():
                         chat_history.append(
                             {
                                 "role": "assistant",
-                                "content": "Tudo bem, o lançamento foi cancelado. Posso ajudar com mais alguma coisa?",
+                                "content": "Operação cancelada. Nenhuma alteração foi realizada nas suas contas. Como mais posso ajudar?",
                             }
                         )
                         st.session_state["financial_pending_action"] = None
