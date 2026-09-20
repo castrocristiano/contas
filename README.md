@@ -100,17 +100,43 @@ O desenvolvimento de novas funcionalidades segue o ciclo do **Spec-Driven Develo
 
 ## 🚀 Como Executar
 
-### 1. Inicializar infraestrutura e banco de dados
+### Opção 1: Execução completa com Docker Compose / Podman Compose (Recomendado)
+
+Sobe o banco PostgreSQL e o frontend Streamlit, aplicando as migrações automaticamente:
 
 ```bash
-# Subir o banco PostgreSQL via podman-compose
-podman-compose up -d
+# Com Docker Compose
+docker compose up --build -d
 
-# Executar as migrações do banco com Alembic
-uv run alembic upgrade head
+# Ou com Podman Compose
+podman-compose up --build -d
 ```
 
-### 2. Iniciar o Servidor MCP
+Acesse a interface web em **http://localhost:8501**.
+
+Para parar os serviços:
+```bash
+docker compose down
+# ou
+podman-compose down
+```
+
+### Opção 2: Execução Manual / Desenvolvimento Local
+
+```bash
+# 1. Subir apenas o banco de dados PostgreSQL
+docker compose up db -d
+# ou
+podman-compose up db -d
+
+# 2. Executar as migrações do banco com Alembic
+uv run alembic upgrade head
+
+# 3. Iniciar a Interface Web (Streamlit Frontend)
+uv run streamlit run src/contas/ui/app.py
+```
+
+### Iniciar o Servidor MCP
 
 ```bash
 # Modo inspeção interativa via browser (MCP Inspector)
@@ -118,13 +144,6 @@ uv run mcp dev src/contas/server.py
 
 # Ou execução direta via módulo stdio (para Claude Desktop / Antigravity)
 uv run python -m contas
-```
-
-### 3. Iniciar a Interface Web (Streamlit Frontend)
-
-```bash
-# Inicia o painel gráfico no navegador em http://localhost:8501
-uv run streamlit run src/contas/ui/app.py
 ```
 
 ---
