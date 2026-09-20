@@ -198,6 +198,40 @@ _TOOLS: list[dict] = [
             },
         },
     },
+    {
+        "type": "function",
+        "function": {
+            "name": "create_account",
+            "description": (
+                "Cria uma nova conta financeira para o usuário. "
+                "Use quando o usuário pedir para criar, adicionar ou cadastrar uma conta bancária, "
+                "carteira, poupança, investimento, etc."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "name": {
+                        "type": "string",
+                        "description": "Nome da conta (ex: 'Nubank', 'Bradesco Corrente', 'Carteira').",
+                    },
+                    "account_type": {
+                        "type": "string",
+                        "enum": ["checking", "savings", "investment", "cash"],
+                        "description": (
+                            "Tipo da conta: 'checking' (corrente), 'savings' (poupança), "
+                            "'investment' (investimento), 'cash' (carteira/dinheiro físico)."
+                        ),
+                    },
+                    "initial_balance": {
+                        "type": "string",
+                        "description": "Saldo inicial em decimal positivo com ponto (ex: '0.00'). Padrão: '0.00'.",
+                        "default": "0.00",
+                    },
+                },
+                "required": ["name", "account_type"],
+            },
+        },
+    },
 ]
 
 # ---------------------------------------------------------------------------
@@ -333,6 +367,13 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             transaction_date=tx_date,
         )
 
+    if pending.tool_name == "create_account":
+        return UIService.create_account(
+            name=args["name"],
+            account_type=args.get("account_type", "checking"),
+            initial_balance=args.get("initial_balance", "0.00"),
+        )
+
     return {"error": {"message": f"Ação desconhecida: {pending.tool_name}"}}
 
 
@@ -363,6 +404,29 @@ def _build_action_summary(
             f"Conta: **{args.get('account_name', '?')}** | "
             f"Categoria: {args.get('category_name', '—')} | Data: {date}"
         )
+    if name == "create_account":
+        type_labels = {
+            "checking": "Corrente",
+            "savings": "Poupança",
+            "investment": "Investimento",
+            "cash": "Carteira/Dinheiro",
+        }
+        acc_type_label = type_labels.get(
+            args.get("account_type", "checking"), args.get("account_type", "?")
+        )
+        initial = args.get("initial_balance", "0.00")
+        try:
+            initial_fmt = (
+                f"R$ {float(initial):,.2f}".replace(",", "X")
+                .replace(".", ",")
+                .replace("X", ".")
+            )
+        except ValueError:
+            initial_fmt = f"R$ {initial}"
+        return (
+            f"Criar conta **{args.get('name', '?')}** | "
+            f"Tipo: {acc_type_label} | Saldo inicial: {initial_fmt}"
+        )
     return f"Ação: `{name}` com argumentos `{args}`"
 
 
@@ -378,13 +442,13 @@ Diretrizes:
 - Responda sempre em Português do Brasil.
 - Seja conciso mas completo. Use markdown quando útil (listas, negrito, tabelas simples).
 - Para consultas, use as ferramentas disponíveis para buscar dados atualizados antes de responder.
-- Para registrar transações (record_transaction), o sistema exibirá uma tela de confirmação — não execute sem ela.
+- Para criar contas (create_account) ou registrar transações (record_transaction), o sistema exibirá uma tela de confirmação — não execute sem ela.
 - Formate valores monetários sempre como R$ X.XXX,XX (padrão brasileiro).
 - Se dados de ferramentas contiverem um campo "error", informe o usuário de forma amigável.
 - Se o usuário pedir algo que não é possível com os dados disponíveis, explique gentilmente.
 """
 
-_WRITE_TOOLS: frozenset[str] = frozenset({"record_transaction"})
+_WRITE_TOOLS: frozenset[str] = frozenset({"record_transaction", "create_account"})
 
 
 # ---------------------------------------------------------------------------
