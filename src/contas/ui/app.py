@@ -1,3 +1,4 @@
+import logging
 from datetime import UTC, datetime, timedelta
 from uuid import UUID
 
@@ -13,6 +14,8 @@ from contas.services.financial_chat import (
     execute_pending_action,
 )
 from contas.ui.services import UIService
+
+logger = logging.getLogger(__name__)
 
 # Configuração da Página
 st.set_page_config(
@@ -585,6 +588,7 @@ def main():
 
         # Sidebar extras
         if st.sidebar.button("🗑️ Limpar Conversa", key="btn_clear_chat"):
+            logger.info("Chat conversation cleared by user.")
             st.session_state["financial_chat_history"] = []
             st.session_state["financial_pending_action"] = None
             st.rerun()
@@ -597,6 +601,10 @@ def main():
 
         chat_history: list[dict] = st.session_state["financial_chat_history"]
         pending: PendingAction | None = st.session_state["financial_pending_action"]
+
+        # Toast notification queue
+        if toast_msg := st.session_state.pop("financial_chat_toast", None):
+            st.toast(toast_msg["message"], icon=toast_msg.get("icon", "✅"))
 
         # Render chat history
         for msg in chat_history:
@@ -613,16 +621,28 @@ def main():
                     if st.button(
                         "✅ Confirmar", type="primary", key="btn_confirm_pending"
                     ):
+                        logger.info("User confirmed pending action: %s", pending.tool_name)
                         with st.spinner("Processando operação..."):
                             result = execute_pending_action(pending)
                         if "error" in result:
+                            err_desc = result["error"].get("message", result["error"])
+                            logger.error("Execution failed for action %s: %s", pending.tool_name, result["error"])
+                            st.session_state["financial_chat_toast"] = {
+                                "message": f"Erro: {err_desc}",
+                                "icon": "❌",
+                            }
                             st.error(
-                                f"Erro ao processar: {result['error'].get('message', result['error'])}"
+                                f"Erro ao processar: {err_desc}"
                             )
                         else:
                             success_msg = result.get(
                                 "message", "Operação realizada com sucesso!"
                             )
+                            logger.info("Execution succeeded for action %s: %s", pending.tool_name, success_msg)
+                            st.session_state["financial_chat_toast"] = {
+                                "message": success_msg,
+                                "icon": "✅",
+                            }
                             st.success(success_msg)
                             chat_history.append(
                                 {
@@ -634,6 +654,11 @@ def main():
                         st.rerun()
                 with col_cancel:
                     if st.button("❌ Cancelar", key="btn_cancel_pending"):
+                        logger.info("User cancelled pending action: %s", pending.tool_name)
+                        st.session_state["financial_chat_toast"] = {
+                            "message": "Operação cancelada pelo usuário.",
+                            "icon": "⚠️",
+                        }
                         chat_history.append(
                             {
                                 "role": "assistant",
@@ -648,19 +673,25 @@ def main():
             "Ex: Qual meu saldo total? / Lance R$ 80 de supermercado na Nubank / Como estão meus orçamentos?"
         )
         if user_input:
+            logger.info("Chat user input received: %s", user_input)
             chat_history.append({"role": "user", "content": user_input})
             with st.chat_message("user"):
                 st.markdown(user_input)
 
-            with st.chat_message("assistant"), st.spinner("Pensando..."):
+            with (
+                st.chat_message("assistant"),
+                st.spinner("Analisando suas finanças e preparando resposta..."),
+            ):
                 try:
                     reply, new_pending = chat_with_financial_assistant(
                         messages=chat_history,
                     )
+                    logger.info("Assistant reply generated (pending action: %s)", bool(new_pending))
                     st.markdown(reply)
                     chat_history.append({"role": "assistant", "content": reply})
                     st.session_state["financial_pending_action"] = new_pending
                 except Exception as exc:  # noqa: BLE001
+                    logger.exception("Error while processing financial assistant message: %s", exc)
                     err_msg = f"Erro ao consultar o assistente: {exc}"
                     st.error(err_msg)
                     chat_history.append({"role": "assistant", "content": err_msg})

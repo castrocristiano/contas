@@ -530,3 +530,24 @@ def test_build_action_summary_all_write_tools():
     )
     assert "2 contas em lote" in s_del_accs
     assert "Conta A" in s_del_accs and "Conta B" in s_del_accs
+
+
+def test_chat_logging(caplog):
+    """Verify that financial_chat logs start of turn, tool execution, and replies."""
+    import logging
+
+    client = MagicMock()
+    client.chat.completions.create.return_value = _mock_text_response("Olá! Como posso ajudar?")
+
+    with caplog.at_level(logging.INFO):
+        reply, pending = chat_with_financial_assistant(
+            messages=[{"role": "user", "content": "Olá assistente"}],
+            client=client,
+        )
+
+    assert reply == "Olá! Como posso ajudar?"
+    assert pending is None
+    assert any("Starting chat turn" in record.message for record in caplog.records)
+    assert any("Last user message: Olá assistente" in record.message for record in caplog.records)
+    assert any("Chat turn completed with text reply" in record.message for record in caplog.records)
+

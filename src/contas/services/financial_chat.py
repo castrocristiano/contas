@@ -8,6 +8,7 @@ immediately — the UI layer is responsible for showing a confirmation step.
 from __future__ import annotations
 
 import json
+import logging
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
@@ -16,6 +17,8 @@ from openai import OpenAI
 
 from contas.config import settings
 from contas.ui.services import UIService
+
+logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
 # Tool schemas exposed to the model
@@ -414,6 +417,7 @@ def _execute_read_tool(
 ) -> str:
     """Execute a read-only tool and return the result serialised as JSON."""
     now = datetime.now(UTC)
+    logger.debug("Executing read tool: %s with arguments: %s", name, args)
 
     if name == "list_accounts":
         result = UIService.list_accounts(
@@ -443,6 +447,7 @@ def _execute_read_tool(
         if account is None and accounts:
             account = accounts[0]
         if account is None:
+            logger.warning("No account found for get_statement: %s", account_name)
             return json.dumps({"error": "Nenhuma conta encontrada."})
 
         # Sensible defaults if not specified: cover broad range to not miss transactions
@@ -471,10 +476,12 @@ def _execute_read_tool(
 
         inst_id = args.get("installment_id")
         if not inst_id:
+            logger.warning("installment_id is missing for get_installment_plan")
             return json.dumps({"error": "Parâmetro 'installment_id' é obrigatório."})
         result = UIService.get_installment_plan(installment_id=UUID(inst_id))
         return json.dumps(result, ensure_ascii=False, default=str)
 
+    logger.warning("Unknown read tool requested: %s", name)
     return json.dumps({"error": f"Ferramenta desconhecida: {name}"})
 
 
@@ -489,6 +496,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
 
     args = pending.arguments
     now = datetime.now(UTC)
+    logger.info("Executing pending write action: %s with arguments: %s", pending.tool_name, args)
 
     if pending.tool_name == "record_transaction":
         # Resolve account by name
@@ -498,6 +506,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             pending.accounts[0] if pending.accounts else None,
         )
         if account is None:
+            logger.warning("Account not found for record_transaction: %s", account_name)
             return {"error": {"message": "Conta não encontrada."}}
 
         # Resolve optional category
@@ -535,7 +544,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             except Exception:  # noqa: BLE001
                 total_amount = None
 
-        return UIService.record_transaction(
+        res = UIService.record_transaction(
             amount=args["amount"],
             transaction_type=args["transaction_type"],
             source_account_id=UUID(account["id"]),
@@ -545,19 +554,25 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             total_installments=total_installments,
             total_amount=total_amount,
         )
+        logger.info("record_transaction result: %s", res)
+        return res
 
     if pending.tool_name == "create_account":
-        return UIService.create_account(
+        res = UIService.create_account(
             name=args["name"],
             account_type=args.get("account_type", "checking"),
             initial_balance=args.get("initial_balance", "0.00"),
         )
+        logger.info("create_account result: %s", res)
+        return res
 
     if pending.tool_name == "create_category":
-        return UIService.create_category(
+        res = UIService.create_category(
             name=args["name"],
             category_type=args["category_type"],
         )
+        logger.info("create_category result: %s", res)
+        return res
 
     if pending.tool_name == "set_budget":
         cat_name = args.get("category_name", "")
@@ -566,26 +581,31 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             None,
         )
         if not category:
+            logger.warning("Category not found for set_budget: %s", cat_name)
             return {"error": {"message": f"Categoria '{cat_name}' não encontrada."}}
 
         month = args.get("month") or now.month
         year = args.get("year") or now.year
 
-        return UIService.set_budget(
+        res = UIService.set_budget(
             category_id=UUID(category["id"]),
             amount=args["amount"],
             month=month,
             year=year,
         )
+        logger.info("set_budget result: %s", res)
+        return res
 
     if pending.tool_name == "delete_transaction":
         tx_id_str = args.get("transaction_id")
         if not tx_id_str:
             return {"error": {"message": "ID da transação não fornecido."}}
-        return UIService.delete_transaction(
+        res = UIService.delete_transaction(
             transaction_id=UUID(tx_id_str),
             delete_all_installments=args.get("delete_all_installments", False),
         )
+        logger.info("delete_transaction result: %s", res)
+        return res
 
     if pending.tool_name == "delete_account":
         force_cascade = args.get("force_cascade", False)
@@ -620,13 +640,16 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
                 success_accounts.append(account["name"])
 
         if errors and not success_accounts:
+            logger.warning("delete_account errors: %s", errors)
             return {"error": {"message": "; ".join(errors)}}
 
         msg = f"{len(success_accounts)} conta(s) excluída(s)/desativada(s) com sucesso ({', '.join(success_accounts)})."
         if errors:
             msg += f" Erros: {'; '.join(errors)}"
+        logger.info("delete_account completed: %s", msg)
         return {"message": msg, "success_count": len(success_accounts)}
 
+    logger.error("Unknown pending action: %s", pending.tool_name)
     return {"error": {"message": f"Ação desconhecida: {pending.tool_name}"}}
 
 
@@ -831,8 +854,13 @@ def chat_with_financial_assistant(
         *messages,
     ]
 
+    logger.info("Starting chat turn with %d message(s)", len(messages))
+    if messages:
+        logger.info("Last user message: %s", messages[-1].get("content"))
+
     # Agentic loop: keep resolving tool_calls until plain text reply or max iterations
-    for _ in range(6):
+    for iteration in range(6):
+        logger.debug("Chat iteration %d: sending request to OpenAI (%s)", iteration + 1, model)
         response = client.chat.completions.create(
             model=model,
             messages=full_messages,
@@ -844,17 +872,23 @@ def chat_with_financial_assistant(
         full_messages.append(msg.model_dump(exclude_unset=False))
 
         if not msg.tool_calls:
+            logger.info("Chat turn completed with text reply (length: %d)", len(msg.content or ""))
             return msg.content or "", None
 
+        logger.info("Model requested %d tool call(s)", len(msg.tool_calls))
         for tc in msg.tool_calls:
             name = tc.function.name
             try:
                 args: dict[str, Any] = json.loads(tc.function.arguments)
             except json.JSONDecodeError:
+                logger.warning("Failed to decode arguments for tool %s: %s", name, tc.function.arguments)
                 args = {}
+
+            logger.info("Tool called: %s | Args: %s", name, args)
 
             if name in _WRITE_TOOLS:
                 # Return early — UI must handle confirmation
+                logger.info("Write tool detected: %s. Returning PendingAction for UI confirmation.", name)
                 summary = _build_action_summary(name, args, accounts, categories)
                 pending = PendingAction(
                     tool_name=name,
@@ -879,6 +913,7 @@ def chat_with_financial_assistant(
                 }
             )
 
+    logger.warning("Chat turn reached maximum iterations without completing.")
     return (
         "Não consegui concluir após várias tentativas. Tente reformular sua pergunta.",
         None,

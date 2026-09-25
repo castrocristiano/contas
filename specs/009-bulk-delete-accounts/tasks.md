@@ -18,13 +18,20 @@
   - [x] 3.3 Atualizar `_build_action_summary` para exibir resumo de exclusão em lote com nomes das contas
   - [x] 3.4 Instruir o `SYSTEM_PROMPT` para comandos de exclusão de múltiplas contas
 
-- [x] 4. Testes Unitários e Validação
-  - [x] 4.1 Testar chamadas de exclusão em lote no `UIService`
-  - [x] 4.2 Testar `execute_pending_action` e resumo no chat para lote de contas
-  - [x] 4.3 Executar `uv run ruff check . && uv run ruff format .`
-  - [x] 4.4 Executar `uv run pytest -v` (82 testes passando)
+- [x] 4. Feedback Visual e Observabilidade no Chat
+  - [x] 4.1 Adicionar `st.spinner` durante processamento do assistente financeiro (`app.py`)
+  - [x] 4.2 Adicionar logging estruturado em `financial_chat.py` (iterações, tool calls, pending actions)
+  - [x] 4.3 Adicionar logging estruturado em `app.py` (mensagens de chat, confirmações, cancelamentos)
+  - [x] 4.4 Adicionar notificações `st.toast` após confirmação, cancelamento ou erro de ações no chat
 
-- [x] 5. Entrega
-  - [x] 5.1 Atualizar documentação SDD para Implemented
-  - [x] 5.2 Commit e push para `feature/009-bulk-delete-accounts`
+- [x] 5. Testes Unitários e Validação
+  - [x] 5.1 Testar chamadas de exclusão em lote no `UIService`
+  - [x] 5.2 Testar `execute_pending_action` e resumo no chat para lote de contas
+  - [x] 5.3 Testar logging do fluxo de chat em `tests/unit/test_financial_chat.py` com `caplog`
+  - [x] 5.4 Executar `uv run ruff check . && uv run ruff format .`
+  - [x] 5.5 Executar `uv run pytest -v` (83 testes passando)
+
+- [x] 6. Entrega
+  - [x] 6.1 Atualizar documentação SDD para Implemented (`spec.md`, `plan.md`, `tasks.md`)
+  - [x] 6.2 Commit e push para `feature/009-bulk-delete-accounts`
 

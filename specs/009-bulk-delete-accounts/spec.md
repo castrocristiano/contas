@@ -33,6 +33,16 @@ Para que o assistente monte um bloco de confirmação em lote exigindo minha apr
 2. **Given** a `PendingAction` exibida na UI, **When** o resumo é gerado, **Then** exibe: "🗑️ Excluir/Desativar 2 contas em lote: Carteira, Poupança Antiga".
 3. **Given** a confirmação aprovada pelo usuário, **When** `execute_pending_action` roda, **Then** todas as contas informadas são processadas e o feedback lista o resultado consolidado.
 
+### User Story 3 — Feedback Visual e Observabilidade no Chat (Priority: P2)
+Como usuário do assistente financeiro,  
+Quero ver um indicador de carregamento (spinner) enquanto o assistente processa minhas solicitações, logs de auditoria no backend e notificações tipo toast quando qualquer operação for concluída ou cancelada,  
+Para ter visibilidade total e imediata do status das ações financeiras solicitadas.
+
+**Acceptance Scenarios**:
+1. **Given** envio de mensagem no chat, **When** o assistente estiver processando, **Then** um spinner com mensagem contextual é exibido até a resposta ser renderizada.
+2. **Given** transação ou alteração confirmada/cancelada, **When** o processamento terminar, **Then** um toast temporário (`st.toast`) com ícone adequado (✅, ❌, ⚠️) é exibido no topo da tela.
+3. **Given** qualquer interação no chat ou ferramenta executada, **When** a ação ocorrer, **Then** eventos estruturados são registrados via `logging.getLogger` (info/debug/error/exception).
+
 ---
 
 ## Requisitos
@@ -43,10 +53,14 @@ Para que o assistente monte um bloco de confirmação em lote exigindo minha apr
 - **RF-003**: Toda exclusão em lote no chat DEVE passar obrigatoriamente pelo fluxo de `PendingAction` com resumo claro e botões `✅ Confirmar` / `❌ Cancelar`.
 - **RF-004**: O usuário DEVE poder optar por exclusão padrão (soft-delete se houver transações) ou forçada em cascata (`force_cascade=True`).
 - **RF-005**: Ao concluir o lote, um feedback consolidado DEVE ser exibido indicando quantas contas foram excluídas/desativadas com sucesso.
+- **RF-006**: O chat DEVE exibir `st.spinner` durante a chamada ao modelo e processamento de ferramentas.
+- **RF-007**: O sistema DEVE exibir notificação `st.toast` ao executar ou cancelar qualquer operação pelo chat.
+- **RF-008**: O módulo `financial_chat` e o fluxo de chat do `app.py` DEVEM gerar logs com `logger.info`, `logger.debug` e `logger.exception`.
 
 ---
 
 ## Critérios de Sucesso
 - **CS-001**: O usuário consegue apagar ou desativar N contas simultaneamente tanto na aba de Configurações quanto via Chat.
 - **CS-002**: Nenhuma exclusão no chat é executada sem confirmação explícita.
-- **CS-003**: Testes automatizados cobrindo a funcionalidade passam 100%.
+- **CS-003**: Feedback visual claro com spinner e toast após execução ou cancelamento de ações.
+- **CS-004**: Testes automatizados cobrindo a funcionalidade e o logging passam 100%.

@@ -23,7 +23,13 @@ Na seção de **⚙️ Configurações**:
   - Botão de ação: `🗑️ Excluir Selecionadas (N)`.
   - Ao clicar, exibe modal ou confirmação direta, executa `UIService.delete_account` para cada conta selecionada e exibe relatório de resultados.
 
-### B. Testes
+### B. Assistente Financeiro & Feedback Visual (`src/contas/ui/app.py` & `src/contas/services/financial_chat.py`)
+- Adicionar `st.spinner` durante o ciclo de resposta do assistente no chat.
+- Adicionar fila de notificações no `st.session_state["financial_chat_toast"]` e renderização de `st.toast` pós-rerun para confirmação, cancelamento e erro de operações.
+- Implementar logging estruturado com `logging.getLogger(__name__)` em `financial_chat.py` (iterações, tool calls, pending actions) e `app.py` (mensagens enviadas, confirmações de ações).
+
+### C. Testes
 - Adicionar teste unitário validando a chamada em lote de exclusão no `UIService`.
+- Adicionar teste unitário em `tests/unit/test_financial_chat.py` verificando a emissão de logs (`caplog`).
 - Validar `ruff` e suíte completa com `pytest`.
 
