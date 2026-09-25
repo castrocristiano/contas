@@ -356,23 +356,28 @@ _TOOLS: list[dict] = [
         "function": {
             "name": "delete_account",
             "description": (
-                "Exclui uma conta financeira se não houver transações, ou a desativa (soft-delete). "
-                "Se force_cascade for True, remove todas as transações associadas e deleta a conta."
+                "Exclui ou desativa uma ou mais contas financeiras. "
+                "Pode receber o nome de uma única conta (`account_name`) ou uma lista de nomes de contas (`account_names`) para exclusão em lote. "
+                "Se force_cascade for True, remove todas as transações associadas permanentemente e deleta as contas."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "account_name": {
                         "type": "string",
-                        "description": "Nome da conta a ser excluída/desativada.",
+                        "description": "Nome de uma única conta a ser excluída/desativada (quando for apenas uma).",
+                    },
+                    "account_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Lista com os nomes das contas a serem excluídas/desativadas em lote (quando forem várias contas).",
                     },
                     "force_cascade": {
                         "type": "boolean",
-                        "description": "Se True, força a exclusão em cascata de todas as transações vinculadas.",
+                        "description": "Se True, força a exclusão em cascata de todas as transações vinculadas permanentemente.",
                         "default": False,
                     },
                 },
-                "required": ["account_name"],
             },
         },
     },
@@ -583,17 +588,44 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         )
 
     if pending.tool_name == "delete_account":
-        acc_name = args.get("account_name", "")
-        account = next(
-            (a for a in pending.accounts if acc_name.lower() in a["name"].lower()),
-            None,
-        )
-        if not account:
-            return {"error": {"message": f"Conta '{acc_name}' não encontrada."}}
-        return UIService.delete_account(
-            account_id=UUID(account["id"]),
-            force_cascade=args.get("force_cascade", False),
-        )
+        force_cascade = args.get("force_cascade", False)
+        acc_names = args.get("account_names") or []
+        if not acc_names and args.get("account_name"):
+            acc_names = [args["account_name"]]
+
+        if not acc_names:
+            return {"error": {"message": "Nenhuma conta informada para exclusão."}}
+
+        success_accounts = []
+        errors = []
+
+        for name in acc_names:
+            account = next(
+                (a for a in pending.accounts if name.lower() in a["name"].lower()),
+                None,
+            )
+            if not account:
+                errors.append(f"Conta '{name}' não encontrada.")
+                continue
+
+            res = UIService.delete_account(
+                account_id=UUID(account["id"]),
+                force_cascade=force_cascade,
+            )
+            if "error" in res:
+                errors.append(
+                    f"Conta '{name}': {res['error'].get('message', res['error'])}"
+                )
+            else:
+                success_accounts.append(account["name"])
+
+        if errors and not success_accounts:
+            return {"error": {"message": "; ".join(errors)}}
+
+        msg = f"{len(success_accounts)} conta(s) excluída(s)/desativada(s) com sucesso ({', '.join(success_accounts)})."
+        if errors:
+            msg += f" Erros: {'; '.join(errors)}"
+        return {"message": msg, "success_count": len(success_accounts)}
 
     return {"error": {"message": f"Ação desconhecida: {pending.tool_name}"}}
 
@@ -707,11 +739,19 @@ def _build_action_summary(
     if name == "delete_account":
         force = args.get("force_cascade", False)
         force_note = (
-            " ⚠️ **ATENÇÃO: Todas as transações da conta serão excluídas permanentemente!**"
+            " ⚠️ **ATENÇÃO: Todas as transações da(s) conta(s) serão excluídas permanentemente!**"
             if force
             else " (desativação ou remoção se sem lançamentos)"
         )
-        return f"🗑️ **Excluir/Desativar conta**: **{args.get('account_name', '?')}**{force_note}"
+        acc_names = args.get("account_names") or []
+        if not acc_names and args.get("account_name"):
+            acc_names = [args["account_name"]]
+
+        if len(acc_names) > 1:
+            names_str = ", ".join(f"**{n}**" for n in acc_names)
+            return f"🗑️ **Excluir/Desativar {len(acc_names)} contas em lote**: {names_str}{force_note}"
+        single_name = acc_names[0] if acc_names else args.get("account_name", "?")
+        return f"🗑️ **Excluir/Desativar conta**: **{single_name}**{force_note}"
 
     return f"Ação: `{name}` com argumentos `{args}`"
 
@@ -732,6 +772,7 @@ Diretrizes:
 - Para consultas de plano de parcelamento, use `get_installment_plan` informando o `installment_id`.
 - Para qualquer alteração ou exclusão de dados (`create_account`, `create_category`, `set_budget`, `record_transaction`, `delete_transaction`, `delete_account`), o sistema SEMPRE exigirá confirmação do usuário na interface antes de efetivar.
 - Ao registrar compras parceladas (`record_transaction`), se o usuário disser "em 10x", "em 10 vezes", "parcelado em 3x", etc., você DEVE preencher `total_installments`. Se o valor fornecido for o da parcela (ex: "10 vezes de 216.81"), preencha `amount="216.81"` e `total_amount="2168.10"`. Se o valor fornecido for o valor total (ex: "compra de 1000 em 10x"), preencha `total_amount="1000.00"` e `amount="100.00"`.
+- Se o usuário pedir para excluir ou desativar múltiplas contas de uma só vez (ex: "apague as contas X, Y e Z"), use `delete_account` passando a lista de nomes no campo `account_names`.
 - Se o usuário pedir para excluir um lançamento por descrição ou valor (sem saber o ID), primeiro consulte `get_statement` para obter o `id` da transação antes de propor a ação `delete_transaction`.
 - Formate valores monetários sempre como R$ X.XXX,XX (padrão brasileiro).
 - Se dados de ferramentas contiverem um campo "error", informe o usuário de forma amigável.

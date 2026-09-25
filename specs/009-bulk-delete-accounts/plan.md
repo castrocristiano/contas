@@ -26,3 +26,4 @@ Na seção de **⚙️ Configurações**:
 ### B. Testes
 - Adicionar teste unitário validando a chamada em lote de exclusão no `UIService`.
 - Validar `ruff` e suíte completa com `pytest`.
+
