@@ -218,26 +218,71 @@ def test_execute_pending_action_calls_record_transaction():
     assert result == {"id": "tx-001", "amount": "80.00"}
 
 
-def test_build_action_summary_expense():
-    """_build_action_summary produces a human-readable confirmation string."""
+def test_execute_pending_action_record_installment_transaction():
+    """execute_pending_action forwards total_installments and calculates total_amount if missing."""
+    from uuid import UUID
+
+    accounts = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "PicPay",
+            "balance": "1000.00",
+        }
+    ]
+
+    pending = PendingAction(
+        tool_name="record_transaction",
+        arguments={
+            "amount": "216.81",
+            "transaction_type": "expense",
+            "account_name": "PicPay",
+            "description": "QUINJALMO",
+            "total_installments": 10,
+        },
+        summary="Parcelamento em 10x de R$ 216,81",
+        accounts=accounts,
+        categories=[],
+    )
+
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.record_transaction.return_value = {
+            "id": "tx-001",
+            "installment_id": "inst-123",
+            "total_installments": 10,
+        }
+
+        result = execute_pending_action(pending)
+
+    mock_ui.record_transaction.assert_called_once()
+    call_kwargs = mock_ui.record_transaction.call_args.kwargs
+    assert call_kwargs["amount"] == "216.81"
+    assert call_kwargs["total_installments"] == 10
+    assert call_kwargs["total_amount"] == "2168.10"
+    assert call_kwargs["source_account_id"] == UUID(
+        "00000000-0000-0000-0000-000000000001"
+    )
+    assert result["total_installments"] == 10
+
+
+def test_build_action_summary_expense_installment():
+    """_build_action_summary formats installment purchases with total amount."""
     summary = _build_action_summary(
         "record_transaction",
         {
-            "amount": "99.90",
+            "amount": "216.81",
             "transaction_type": "expense",
-            "account_name": "Nubank",
-            "description": "Farmácia",
-            "category_name": "Saúde",
-            "transaction_date": "2026-09-15",
+            "account_name": "PicPay",
+            "description": "QUINJALMO",
+            "total_installments": 10,
+            "total_amount": "2168.10",
         },
         accounts=[],
         categories=[],
     )
-    assert "Despesa" in summary
-    assert "99,90" in summary
-    assert "Farmácia" in summary
-    assert "Nubank" in summary
-    assert "Saúde" in summary
+    assert "10x de R$ 216,81" in summary
+    assert "Total: R$ 2.168,10" in summary
+    assert "QUINJALMO" in summary
+    assert "PicPay" in summary
 
 
 def test_execute_read_tool_list_accounts():

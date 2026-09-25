@@ -188,6 +188,21 @@ _TOOLS: list[dict] = [
                         "type": "string",
                         "description": "Data no formato YYYY-MM-DD. Padrão: hoje.",
                     },
+                    "total_installments": {
+                        "type": "integer",
+                        "description": (
+                            "Quantidade total de parcelas (ex: 10). "
+                            "Use OBRIGATORIAMENTE quando a compra for parcelada ou em várias vezes."
+                        ),
+                    },
+                    "total_amount": {
+                        "type": "string",
+                        "description": (
+                            "Valor total da compra (ex: '2168.10'). "
+                            "Se o usuário informar apenas o valor de cada parcela (ex: 10 vezes de 216.81), "
+                            "calcule total_amount = parcela * total_installments (2168.10)."
+                        ),
+                    },
                 },
                 "required": [
                     "amount",
@@ -500,6 +515,21 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         if len(tx_date) == 10:  # date-only (YYYY-MM-DD)
             tx_date = f"{tx_date}T12:00:00Z"
 
+        # Handle installment arguments
+        total_installments = args.get("total_installments")
+        total_amount = args.get("total_amount")
+        if (
+            total_installments is not None
+            and total_installments > 1
+            and not total_amount
+        ):
+            try:
+                from decimal import Decimal
+
+                total_amount = f"{Decimal(args['amount']) * total_installments:.2f}"
+            except Exception:  # noqa: BLE001
+                total_amount = None
+
         return UIService.record_transaction(
             amount=args["amount"],
             transaction_type=args["transaction_type"],
@@ -507,6 +537,8 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             category_id=category_id,
             description=args.get("description", ""),
             transaction_date=tx_date,
+            total_installments=total_installments,
+            total_amount=total_amount,
         )
 
     if pending.tool_name == "create_account":
@@ -588,6 +620,28 @@ def _build_action_summary(
         except ValueError:
             amount_fmt = f"R$ {args.get('amount', '?')}"
         date = args.get("transaction_date") or datetime.now(UTC).strftime("%Y-%m-%d")
+
+        total_inst = args.get("total_installments")
+        if total_inst is not None and total_inst > 1:
+            tot_amt_str = args.get("total_amount")
+            if not tot_amt_str:
+                try:
+                    tot_amt_str = f"{float(args.get('amount', '0')) * total_inst:.2f}"
+                except ValueError:
+                    tot_amt_str = None
+            if tot_amt_str:
+                try:
+                    tot_fmt = (
+                        f"R$ {float(tot_amt_str):,.2f}".replace(",", "X")
+                        .replace(".", ",")
+                        .replace("X", ".")
+                    )
+                except ValueError:
+                    tot_fmt = f"R$ {tot_amt_str}"
+                amount_fmt = f"{total_inst}x de {amount_fmt} (Total: {tot_fmt})"
+            else:
+                amount_fmt = f"{total_inst}x de {amount_fmt}"
+
         return (
             f"**{tx_type}** de **{amount_fmt}** — {args.get('description', '')} | "
             f"Conta: **{args.get('account_name', '?')}** | "
@@ -677,6 +731,7 @@ Diretrizes:
 - Se o saldo de uma conta estiver diferente de zero, sempre consulte o extrato dela antes de afirmar que não há transações.
 - Para consultas de plano de parcelamento, use `get_installment_plan` informando o `installment_id`.
 - Para qualquer alteração ou exclusão de dados (`create_account`, `create_category`, `set_budget`, `record_transaction`, `delete_transaction`, `delete_account`), o sistema SEMPRE exigirá confirmação do usuário na interface antes de efetivar.
+- Ao registrar compras parceladas (`record_transaction`), se o usuário disser "em 10x", "em 10 vezes", "parcelado em 3x", etc., você DEVE preencher `total_installments`. Se o valor fornecido for o da parcela (ex: "10 vezes de 216.81"), preencha `amount="216.81"` e `total_amount="2168.10"`. Se o valor fornecido for o valor total (ex: "compra de 1000 em 10x"), preencha `total_amount="1000.00"` e `amount="100.00"`.
 - Se o usuário pedir para excluir um lançamento por descrição ou valor (sem saber o ID), primeiro consulte `get_statement` para obter o `id` da transação antes de propor a ação `delete_transaction`.
 - Formate valores monetários sempre como R$ X.XXX,XX (padrão brasileiro).
 - Se dados de ferramentas contiverem um campo "error", informe o usuário de forma amigável.
