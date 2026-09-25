@@ -802,9 +802,9 @@ def main():
 
         st.divider()
 
-        # Gerenciamento e Exclusão de Contas
-        st.subheader("🗑️ Gerenciar e Excluir Contas")
-        accounts_data = UIService.list_accounts()
+        # Gerenciamento e Exclusão de Contas (Individual e em Lote)
+        st.subheader("🗑️ Gerenciar e Excluir Contas (em Lote)")
+        accounts_data = UIService.list_accounts(include_inactive=True)
         all_accounts = accounts_data.get("accounts", [])
 
         if not all_accounts:
@@ -812,46 +812,100 @@ def main():
         else:
             with st.container(border=True):
                 st.caption(
-                    "Exclua contas sem movimentação ou desative contas existentes para manter seu histórico íntegro."
-                )
-                acc_options = {
-                    f"{a['name']} ({a['account_type'].upper()}) - Saldo: {format_currency(a['balance'])} [{a['id'][:8]}]": a
-                    for a in all_accounts
-                }
-                selected_acc_label = st.selectbox(
-                    "Selecione a conta para excluir/desativar",
-                    options=list(acc_options.keys()),
-                    key="select_acc_delete",
+                    "Selecione uma ou mais contas abaixo para excluir ou desativar em lote. "
+                    "Contas com movimentações serão desativadas (soft-delete), a menos que a opção em cascata seja marcada."
                 )
 
-                if selected_acc_label:
-                    target_acc = acc_options[selected_acc_label]
+                # Prepare DataFrame for data_editor
+                accounts_df = pd.DataFrame(
+                    [
+                        {
+                            "Selecionar": False,
+                            "ID": a["id"],
+                            "Nome": a["name"],
+                            "Tipo": a["account_type"].upper(),
+                            "Saldo": float(a["balance"]),
+                            "Ativa": "Sim" if a.get("is_active", True) else "Não",
+                        }
+                        for a in all_accounts
+                    ]
+                )
+
+                edited_df = st.data_editor(
+                    accounts_df,
+                    column_config={
+                        "Selecionar": st.column_config.CheckboxColumn(
+                            "Selecionar",
+                            help="Marque as contas que deseja excluir",
+                            default=False,
+                        ),
+                        "ID": st.column_config.TextColumn("ID", disabled=True),
+                        "Nome": st.column_config.TextColumn("Nome", disabled=True),
+                        "Tipo": st.column_config.TextColumn("Tipo", disabled=True),
+                        "Saldo": st.column_config.NumberColumn(
+                            "Saldo (R$)", format="R$ %.2f", disabled=True
+                        ),
+                        "Ativa": st.column_config.TextColumn("Ativa", disabled=True),
+                    },
+                    disabled=["ID", "Nome", "Tipo", "Saldo", "Ativa"],
+                    hide_index=True,
+                    width="stretch",
+                    key="editor_accounts_bulk_delete",
+                )
+
+                selected_rows = edited_df[edited_df["Selecionar"]]
+                selected_count = len(selected_rows)
+
+                col_opt, col_btn = st.columns([2, 1])
+                with col_opt:
                     force_cascade = st.checkbox(
-                        "⚠️ Excluir permanentemente do banco junto com todo o histórico de transações (Cascade)",
+                        "⚠️ Excluir permanentemente do banco junto com todo o histórico (Cascade)",
                         value=False,
-                        help="Se desmarcado e a conta tiver movimentações, ela será apenas desativada (soft-delete), preservando seus registros históricos.",
+                        help="Se desmarcado e a conta tiver movimentações, ela será apenas desativada (soft-delete). Se marcado, apaga todas as transações associadas permanentemente.",
+                        key="chk_force_cascade_bulk",
                     )
 
-                    if st.button(
-                        "Confirmar Exclusão da Conta",
+                with col_btn:
+                    btn_label = (
+                        f"🗑️ Excluir Selecionadas ({selected_count})"
+                        if selected_count > 0
+                        else "🗑️ Excluir Contas Selecionadas"
+                    )
+                    confirm_delete = st.button(
+                        btn_label,
                         type="primary",
-                        key="btn_delete_acc_confirm",
-                    ):
-                        del_acc_res = UIService.delete_account(
-                            account_id=UUID(target_acc["id"]),
-                            force_cascade=force_cascade,
-                        )
-                        if "error" in del_acc_res:
-                            st.error(
-                                f"Erro ao excluir conta: {del_acc_res['error']['message']}"
+                        disabled=selected_count == 0,
+                        key="btn_delete_accounts_bulk",
+                    )
+
+                if confirm_delete:
+                    success_list = []
+                    error_list = []
+
+                    with st.spinner(f"Excluindo {selected_count} conta(s)..."):
+                        for _, row in selected_rows.iterrows():
+                            acc_id_str = row["ID"]
+                            acc_name = row["Nome"]
+                            res = UIService.delete_account(
+                                account_id=UUID(acc_id_str),
+                                force_cascade=force_cascade,
                             )
-                        else:
-                            st.success(
-                                del_acc_res.get(
-                                    "message", "Conta processada com sucesso!"
+                            if "error" in res:
+                                error_list.append(
+                                    f"**{acc_name}**: {res['error'].get('message', res['error'])}"
                                 )
-                            )
-                            st.rerun()
+                            else:
+                                success_list.append(acc_name)
+
+                    if success_list:
+                        st.success(
+                            f"✅ {len(success_list)} conta(s) processada(s) com sucesso: {', '.join(success_list)}"
+                        )
+                    if error_list:
+                        for err in error_list:
+                            st.error(f"❌ {err}")
+
+                    st.rerun()
 
 
 if __name__ == "__main__":
