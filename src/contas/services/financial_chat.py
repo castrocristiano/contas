@@ -870,6 +870,7 @@ def chat_with_financial_assistant(
             messages=full_messages,
             tools=_TOOLS,
             tool_choice="auto",
+            store=settings.openai_store,
         )
 
         msg = response.choices[0].message
