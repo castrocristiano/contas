@@ -537,7 +537,9 @@ def test_chat_logging(caplog):
     import logging
 
     client = MagicMock()
-    client.chat.completions.create.return_value = _mock_text_response("Olá! Como posso ajudar?")
+    client.chat.completions.create.return_value = _mock_text_response(
+        "Olá! Como posso ajudar?"
+    )
 
     with caplog.at_level(logging.INFO):
         reply, pending = chat_with_financial_assistant(
@@ -548,6 +550,11 @@ def test_chat_logging(caplog):
     assert reply == "Olá! Como posso ajudar?"
     assert pending is None
     assert any("Starting chat turn" in record.message for record in caplog.records)
-    assert any("Last user message: Olá assistente" in record.message for record in caplog.records)
-    assert any("Chat turn completed with text reply" in record.message for record in caplog.records)
-
+    assert any(
+        "Last user message: Olá assistente" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "Chat turn completed with text reply" in record.message
+        for record in caplog.records
+    )

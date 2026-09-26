@@ -621,24 +621,32 @@ def main():
                     if st.button(
                         "✅ Confirmar", type="primary", key="btn_confirm_pending"
                     ):
-                        logger.info("User confirmed pending action: %s", pending.tool_name)
+                        logger.info(
+                            "User confirmed pending action: %s", pending.tool_name
+                        )
                         with st.spinner("Processando operação..."):
                             result = execute_pending_action(pending)
                         if "error" in result:
                             err_desc = result["error"].get("message", result["error"])
-                            logger.error("Execution failed for action %s: %s", pending.tool_name, result["error"])
+                            logger.error(
+                                "Execution failed for action %s: %s",
+                                pending.tool_name,
+                                result["error"],
+                            )
                             st.session_state["financial_chat_toast"] = {
                                 "message": f"Erro: {err_desc}",
                                 "icon": "❌",
                             }
-                            st.error(
-                                f"Erro ao processar: {err_desc}"
-                            )
+                            st.error(f"Erro ao processar: {err_desc}")
                         else:
                             success_msg = result.get(
                                 "message", "Operação realizada com sucesso!"
                             )
-                            logger.info("Execution succeeded for action %s: %s", pending.tool_name, success_msg)
+                            logger.info(
+                                "Execution succeeded for action %s: %s",
+                                pending.tool_name,
+                                success_msg,
+                            )
                             st.session_state["financial_chat_toast"] = {
                                 "message": success_msg,
                                 "icon": "✅",
@@ -654,7 +662,9 @@ def main():
                         st.rerun()
                 with col_cancel:
                     if st.button("❌ Cancelar", key="btn_cancel_pending"):
-                        logger.info("User cancelled pending action: %s", pending.tool_name)
+                        logger.info(
+                            "User cancelled pending action: %s", pending.tool_name
+                        )
                         st.session_state["financial_chat_toast"] = {
                             "message": "Operação cancelada pelo usuário.",
                             "icon": "⚠️",
@@ -686,12 +696,17 @@ def main():
                     reply, new_pending = chat_with_financial_assistant(
                         messages=chat_history,
                     )
-                    logger.info("Assistant reply generated (pending action: %s)", bool(new_pending))
+                    logger.info(
+                        "Assistant reply generated (pending action: %s)",
+                        bool(new_pending),
+                    )
                     st.markdown(reply)
                     chat_history.append({"role": "assistant", "content": reply})
                     st.session_state["financial_pending_action"] = new_pending
-                except Exception as exc:  # noqa: BLE001
-                    logger.exception("Error while processing financial assistant message: %s", exc)
+                except Exception as exc:
+                    logger.exception(
+                        "Error while processing financial assistant message"
+                    )
                     err_msg = f"Erro ao consultar o assistente: {exc}"
                     st.error(err_msg)
                     chat_history.append({"role": "assistant", "content": err_msg})

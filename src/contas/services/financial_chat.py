@@ -496,7 +496,9 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
 
     args = pending.arguments
     now = datetime.now(UTC)
-    logger.info("Executing pending write action: %s with arguments: %s", pending.tool_name, args)
+    logger.info(
+        "Executing pending write action: %s with arguments: %s", pending.tool_name, args
+    )
 
     if pending.tool_name == "record_transaction":
         # Resolve account by name
@@ -860,7 +862,9 @@ def chat_with_financial_assistant(
 
     # Agentic loop: keep resolving tool_calls until plain text reply or max iterations
     for iteration in range(6):
-        logger.debug("Chat iteration %d: sending request to OpenAI (%s)", iteration + 1, model)
+        logger.debug(
+            "Chat iteration %d: sending request to OpenAI (%s)", iteration + 1, model
+        )
         response = client.chat.completions.create(
             model=model,
             messages=full_messages,
@@ -872,7 +876,10 @@ def chat_with_financial_assistant(
         full_messages.append(msg.model_dump(exclude_unset=False))
 
         if not msg.tool_calls:
-            logger.info("Chat turn completed with text reply (length: %d)", len(msg.content or ""))
+            logger.info(
+                "Chat turn completed with text reply (length: %d)",
+                len(msg.content or ""),
+            )
             return msg.content or "", None
 
         logger.info("Model requested %d tool call(s)", len(msg.tool_calls))
@@ -881,14 +888,21 @@ def chat_with_financial_assistant(
             try:
                 args: dict[str, Any] = json.loads(tc.function.arguments)
             except json.JSONDecodeError:
-                logger.warning("Failed to decode arguments for tool %s: %s", name, tc.function.arguments)
+                logger.warning(
+                    "Failed to decode arguments for tool %s: %s",
+                    name,
+                    tc.function.arguments,
+                )
                 args = {}
 
             logger.info("Tool called: %s | Args: %s", name, args)
 
             if name in _WRITE_TOOLS:
                 # Return early — UI must handle confirmation
-                logger.info("Write tool detected: %s. Returning PendingAction for UI confirmation.", name)
+                logger.info(
+                    "Write tool detected: %s. Returning PendingAction for UI confirmation.",
+                    name,
+                )
                 summary = _build_action_summary(name, args, accounts, categories)
                 pending = PendingAction(
                     tool_name=name,
