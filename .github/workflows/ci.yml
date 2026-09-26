@@ -159,3 +159,26 @@ jobs:
             --title "Release $TAG" \
             --generate-notes
 
+      - name: Sync develop branch with main
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+          echo "Buscando histórico completo de develop e main..."
+          git fetch origin develop main
+
+          echo "Trocando para a branch develop..."
+          git checkout develop
+
+          echo "Mesclando main em develop..."
+          git merge origin/main --no-edit -m "chore: sync develop with main after release [skip ci]" || {
+            echo "Conflito detectado ao mesclar main em develop. Forçando sincronização fast-forward ou avisando..."
+            # Em repositórios onde develop é a base de main, tentamos merge ou rebase seguro
+            exit 1
+          }
+
+          echo "Enviando atualizações para origin/develop..."
+          git push origin develop
+
