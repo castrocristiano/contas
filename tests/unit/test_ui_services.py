@@ -58,3 +58,35 @@ async def test_ui_service_bulk_delete_accounts():
         for a_id in ids
     ]
     assert all("error" not in r for r in results)
+
+
+@pytest.mark.anyio
+async def test_ui_service_bulk_delete_transactions():
+    from uuid import UUID
+
+    acc = UIService.create_account(
+        name=f"Tx Acc {uuid4().hex[:6]}",
+        account_type=AccountType.CHECKING,
+        initial_balance="1000.00",
+    )
+    acc_id = UUID(acc["id"])
+
+    t1 = UIService.record_transaction(
+        amount="50.00",
+        transaction_type="expense",
+        source_account_id=acc_id,
+        description="Tx 1",
+    )
+    t2 = UIService.record_transaction(
+        amount="30.00",
+        transaction_type="expense",
+        source_account_id=acc_id,
+        description="Tx 2",
+    )
+
+    t_ids = [t1["id"], t2["id"]]
+    results = [UIService.delete_transaction(transaction_id=UUID(tid)) for tid in t_ids]
+    assert all("error" not in r for r in results)
+
+    # Clean up account
+    UIService.delete_account(account_id=acc_id, force_cascade=True)

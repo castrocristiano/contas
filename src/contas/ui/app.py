@@ -5,6 +5,7 @@ from uuid import UUID
 import pandas as pd
 import streamlit as st
 
+from contas.config import settings
 from contas.models.account import AccountType
 from contas.models.category import CategoryType
 from contas.models.transaction import TransactionType
@@ -143,7 +144,28 @@ def main():
                     )
                     sum_col4.metric("Qtd. Transações", summary.get("count", 0))
 
-                    # Tabela formatada
+                    # Tabela interativa com ordenação e seleção
+                    statement_state_key = f"statement_select_all_{selected_acc['id']}"
+                    if statement_state_key not in st.session_state:
+                        st.session_state[statement_state_key] = False
+
+                    btn_c1, btn_c2, _ = st.columns([1, 1, 4])
+                    with btn_c1:
+                        if st.button(
+                            "☑️ Selecionar Tudo",
+                            key=f"btn_stmt_select_all_{selected_acc['id']}",
+                        ):
+                            st.session_state[statement_state_key] = True
+                            st.rerun()
+                    with btn_c2:
+                        if st.button(
+                            "⬜ Desmarcar Tudo",
+                            key=f"btn_stmt_deselect_all_{selected_acc['id']}",
+                        ):
+                            st.session_state[statement_state_key] = False
+                            st.rerun()
+
+                    default_select = st.session_state[statement_state_key]
                     df_data = []
                     for t in txs:
                         inst_info = ""
@@ -154,9 +176,11 @@ def main():
 
                         df_data.append(
                             {
+                                "Selecionar": default_select,
+                                "ID": t["id"],
                                 "Data": datetime.fromisoformat(
                                     t["transaction_date"]
-                                ).strftime("%d/%m/%Y"),
+                                ).date(),
                                 "Descrição": t["description"],
                                 "Categoria": t.get("category") or "—",
                                 "Tipo": t["transaction_type"].upper(),
@@ -164,24 +188,109 @@ def main():
                                 if t["status"] == "cleared"
                                 else "Pendente",
                                 "Parcela": inst_info or "À vista",
-                                "Valor": format_currency(t["amount"]),
+                                "Valor (R$)": float(t["amount"]),
+                                "_raw": t,
                             }
                         )
-                    st.dataframe(
-                        pd.DataFrame(df_data), width="stretch", hide_index=True
+
+                    edited_stmt_df = st.data_editor(
+                        pd.DataFrame(df_data).drop(columns=["_raw"]),
+                        width="stretch",
+                        hide_index=True,
+                        column_config={
+                            "Selecionar": st.column_config.CheckboxColumn(
+                                "Selecionar", default=default_select
+                            ),
+                            "ID": st.column_config.TextColumn("ID", disabled=True),
+                            "Data": st.column_config.DateColumn(
+                                "Data", format="DD/MM/YYYY", disabled=True
+                            ),
+                            "Descrição": st.column_config.TextColumn(
+                                "Descrição", disabled=True
+                            ),
+                            "Categoria": st.column_config.TextColumn(
+                                "Categoria", disabled=True
+                            ),
+                            "Tipo": st.column_config.TextColumn("Tipo", disabled=True),
+                            "Status": st.column_config.TextColumn(
+                                "Status", disabled=True
+                            ),
+                            "Parcela": st.column_config.TextColumn(
+                                "Parcela", disabled=True
+                            ),
+                            "Valor (R$)": st.column_config.NumberColumn(
+                                "Valor (R$)", format="R$ %.2f", disabled=True
+                            ),
+                        },
+                        disabled=[
+                            "ID",
+                            "Data",
+                            "Descrição",
+                            "Categoria",
+                            "Tipo",
+                            "Status",
+                            "Parcela",
+                            "Valor (R$)",
+                        ],
+                        key=f"editor_statement_{selected_acc['id']}",
                     )
 
-                    # Ações de Gerenciamento / Exclusão
-                    with st.expander("🗑️ Excluir Lançamento"):
+                    selected_tx_rows = edited_stmt_df[edited_stmt_df["Selecionar"]]
+                    sel_tx_count = len(selected_tx_rows)
+
+                    # Ações de Gerenciamento / Exclusão (Individual e em Lote)
+                    with st.expander("🗑️ Excluir Lançamentos"):
                         st.caption(
-                            "Selecione uma transação para excluir. Se a transação for liquidada, o saldo será estornado automaticamente."
+                            "Exclua uma ou mais transações selecionadas na tabela acima, ou escolha uma transação avulsa abaixo. Se a transação for liquidada, o saldo será estornado automaticamente."
                         )
+
+                        if sel_tx_count > 0:
+                            st.info(
+                                f"📌 Há **{sel_tx_count}** transação(ões) selecionada(s) na tabela."
+                            )
+                            col_del_batch, _ = st.columns([1, 3])
+                            with col_del_batch:
+                                if st.button(
+                                    f"🗑️ Excluir {sel_tx_count} Lançamento(s) Selecionado(s)",
+                                    type="primary",
+                                    key=f"btn_delete_selected_tx_{selected_acc['id']}",
+                                ):
+                                    batch_success = 0
+                                    batch_errors = []
+                                    with st.spinner(
+                                        f"Excluindo {sel_tx_count} transações..."
+                                    ):
+                                        for _, row in selected_tx_rows.iterrows():
+                                            tx_id = UUID(row["ID"])
+                                            res = UIService.delete_transaction(
+                                                transaction_id=tx_id,
+                                                delete_all_installments=False,
+                                            )
+                                            if "error" in res:
+                                                batch_errors.append(
+                                                    f"{row['Descrição']}: {res['error']['message']}"
+                                                )
+                                            else:
+                                                batch_success += 1
+                                    if batch_success > 0:
+                                        st.success(
+                                            f"{batch_success} lançamento(s) excluído(s) com sucesso!"
+                                        )
+                                    if batch_errors:
+                                        st.error(
+                                            "Erros ao excluir:\n"
+                                            + "\n".join(batch_errors)
+                                        )
+                                    st.session_state[statement_state_key] = False
+                                    st.rerun()
+                            st.divider()
+
                         tx_options = {
                             f"{datetime.fromisoformat(t['transaction_date']).strftime('%d/%m/%Y')} - {t['description']} ({format_currency(t['amount'])}) [{t['id'][:8]}]": t
                             for t in txs
                         }
                         selected_label = st.selectbox(
-                            "Escolha a transação",
+                            "Ou escolha uma transação avulsa:",
                             options=list(tx_options.keys()),
                             key="select_tx_delete",
                         )
@@ -204,7 +313,7 @@ def main():
                             col_del_btn, _ = st.columns([1, 4])
                             with col_del_btn:
                                 if st.button(
-                                    "Confirmar Exclusão",
+                                    "Confirmar Exclusão Avulsa",
                                     type="primary",
                                     key="btn_confirm_delete_tx",
                                 ):
@@ -488,6 +597,22 @@ def main():
                 "Confira os lançamentos abaixo. Marque ou desmarque os que deseja cadastrar no sistema."
             )
 
+            # Controles de seleção mestre
+            invoice_select_key = "invoice_select_all"
+            if invoice_select_key not in st.session_state:
+                st.session_state[invoice_select_key] = True
+
+            inv_col1, inv_col2, _ = st.columns([1, 1, 4])
+            with inv_col1:
+                if st.button("☑️ Selecionar Tudo", key="btn_invoice_select_all"):
+                    st.session_state[invoice_select_key] = True
+                    st.rerun()
+            with inv_col2:
+                if st.button("⬜ Desmarcar Tudo", key="btn_invoice_deselect_all"):
+                    st.session_state[invoice_select_key] = False
+                    st.rerun()
+
+            default_inv_select = st.session_state[invoice_select_key]
             df_import = []
             for idx, item in enumerate(items):
                 inst_text = "À vista"
@@ -498,7 +623,7 @@ def main():
 
                 df_import.append(
                     {
-                        "Importar": True,
+                        "Importar": default_inv_select,
                         "Data": item["date"],
                         "Descrição": item["description"],
                         "Valor": float(item["amount"]),
@@ -513,12 +638,17 @@ def main():
                 hide_index=True,
                 column_config={
                     "Importar": st.column_config.CheckboxColumn(
-                        "Importar?", default=True
+                        "Importar?", default=default_inv_select
                     ),
+                    "Data": st.column_config.DateColumn("Data"),
+                    "Descrição": st.column_config.TextColumn("Descrição"),
+                    "Categoria": st.column_config.TextColumn("Categoria"),
+                    "Parcela": st.column_config.TextColumn("Parcela"),
                     "Valor": st.column_config.NumberColumn(
                         "Valor (R$)", format="R$ %.2f"
                     ),
                 },
+                key="editor_invoice_items",
             )
 
             if st.button("🚀 Confirmar e Lançar Despesas Selecionadas", type="primary"):
@@ -572,6 +702,7 @@ def main():
                         st.session_state["invoice_items"] = []
                         st.session_state["chat_history"] = []
                         st.session_state["last_processed_file"] = None
+                        st.session_state[invoice_select_key] = True
                         st.rerun()
         else:
             st.info("Envie um arquivo PDF de fatura acima para iniciar.")
@@ -592,6 +723,22 @@ def main():
             st.session_state["financial_chat_history"] = []
             st.session_state["financial_pending_action"] = None
             st.rerun()
+
+        st.sidebar.divider()
+        st.sidebar.subheader("⚙️ Configurações do Assistente")
+        store_logs = st.sidebar.toggle(
+            "Registrar chamadas no OpenAI Logs",
+            value=settings.openai_store,
+            help="Envia o parâmetro 'store: true' nas requisições da OpenAI para permitir visualização em https://platform.openai.com/logs.",
+            key="toggle_openai_store",
+        )
+        settings.openai_store = store_logs
+        if store_logs:
+            st.sidebar.caption(
+                "🟢 Registro ativo no [OpenAI Logs](https://platform.openai.com/logs)."
+            )
+        else:
+            st.sidebar.caption("⚪ Registro desativado.")
 
         # Session state initialisation
         if "financial_chat_history" not in st.session_state:
@@ -862,11 +1009,28 @@ def main():
                     "Contas com movimentações serão desativadas (soft-delete), a menos que a opção em cascata seja marcada."
                 )
 
+                # Controles mestre de seleção
+                accounts_select_key = "accounts_select_all"
+                if accounts_select_key not in st.session_state:
+                    st.session_state[accounts_select_key] = False
+
+                acc_c1, acc_c2, _ = st.columns([1, 1, 4])
+                with acc_c1:
+                    if st.button("☑️ Selecionar Tudo", key="btn_accounts_select_all"):
+                        st.session_state[accounts_select_key] = True
+                        st.rerun()
+                with acc_c2:
+                    if st.button("⬜ Desmarcar Tudo", key="btn_accounts_deselect_all"):
+                        st.session_state[accounts_select_key] = False
+                        st.rerun()
+
+                default_acc_select = st.session_state[accounts_select_key]
+
                 # Prepare DataFrame for data_editor
                 accounts_df = pd.DataFrame(
                     [
                         {
-                            "Selecionar": False,
+                            "Selecionar": default_acc_select,
                             "ID": a["id"],
                             "Nome": a["name"],
                             "Tipo": a["account_type"].upper(),
@@ -883,7 +1047,7 @@ def main():
                         "Selecionar": st.column_config.CheckboxColumn(
                             "Selecionar",
                             help="Marque as contas que deseja excluir",
-                            default=False,
+                            default=default_acc_select,
                         ),
                         "ID": st.column_config.TextColumn("ID", disabled=True),
                         "Nome": st.column_config.TextColumn("Nome", disabled=True),
@@ -951,6 +1115,7 @@ def main():
                         for err in error_list:
                             st.error(f"❌ {err}")
 
+                    st.session_state[accounts_select_key] = False
                     st.rerun()
 
 

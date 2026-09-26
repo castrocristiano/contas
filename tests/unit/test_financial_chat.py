@@ -558,3 +558,19 @@ def test_chat_logging(caplog):
         "Chat turn completed with text reply" in record.message
         for record in caplog.records
     )
+
+
+def test_chat_passes_openai_store_parameter():
+    """Verify that chat_with_financial_assistant forwards store=settings.openai_store."""
+    client = MagicMock()
+    client.chat.completions.create.return_value = _mock_text_response("Resposta")
+
+    with patch("contas.services.financial_chat.settings") as mock_settings:
+        mock_settings.openai_store = True
+        chat_with_financial_assistant(
+            messages=[{"role": "user", "content": "Teste"}],
+            client=client,
+        )
+
+    call_kwargs = client.chat.completions.create.call_args.kwargs
+    assert call_kwargs.get("store") is True
