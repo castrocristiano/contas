@@ -5,6 +5,7 @@ from uuid import UUID
 import pandas as pd
 import streamlit as st
 
+from contas.config import settings
 from contas.models.account import AccountType
 from contas.models.category import CategoryType
 from contas.models.transaction import TransactionType
@@ -722,6 +723,22 @@ def main():
             st.session_state["financial_chat_history"] = []
             st.session_state["financial_pending_action"] = None
             st.rerun()
+
+        st.sidebar.divider()
+        st.sidebar.subheader("⚙️ Configurações do Assistente")
+        store_logs = st.sidebar.toggle(
+            "Registrar chamadas no OpenAI Logs",
+            value=settings.openai_store,
+            help="Envia o parâmetro 'store: true' nas requisições da OpenAI para permitir visualização em https://platform.openai.com/logs.",
+            key="toggle_openai_store",
+        )
+        settings.openai_store = store_logs
+        if store_logs:
+            st.sidebar.caption(
+                "🟢 Registro ativo no [OpenAI Logs](https://platform.openai.com/logs)."
+            )
+        else:
+            st.sidebar.caption("⚪ Registro desativado.")
 
         # Session state initialisation
         if "financial_chat_history" not in st.session_state:

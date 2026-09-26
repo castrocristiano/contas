@@ -29,3 +29,4 @@ flowchart TD
 ### D. Testes Unitários e Validação
 - Validar comportamento com testes unitários em `tests/unit/test_ui_services.py` ou teste dedicado.
 - Executar `ruff check` e `pytest`.
+

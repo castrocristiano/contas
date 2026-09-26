@@ -22,5 +22,5 @@
 - [x] 5. Testes e Validação
   - [x] 5.1 Atualizar suíte de testes unitários (test_ui_service_bulk_delete_transactions)
   - [x] 5.2 Executar `uv run ruff check . && uv run ruff format .`
-  - [x] 5.3 Executar `uv run pytest -v` (84 testes passando)
+  - [x] 5.3 Executar `uv run pytest -v` (85 testes passando)
   - [x] 5.4 Commit e push da branch

@@ -130,6 +130,7 @@ def parse_invoice_with_openai(
             {"role": "user", "content": f"Texto da fatura:\n\n{pdf_text}"},
         ],
         response_format=InvoiceExtractionContainer,
+        store=settings.openai_store,
     )
 
     return completion.choices[0].message.parsed
@@ -175,6 +176,7 @@ def refine_items_with_chat(
             },
         ],
         response_format=ChatRefinementContainer,
+        store=settings.openai_store,
     )
 
     parsed = completion.choices[0].message.parsed
