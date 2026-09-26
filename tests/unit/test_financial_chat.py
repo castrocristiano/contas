@@ -463,6 +463,31 @@ def test_execute_pending_action_delete_account():
     assert "desativada" in res["message"]
 
 
+def test_execute_pending_action_delete_accounts_bulk():
+
+    acc_1_id = "44444444-4444-4444-4444-444444444441"
+    acc_2_id = "44444444-4444-4444-4444-444444444442"
+    accounts = [
+        {"id": acc_1_id, "name": "Conta 1"},
+        {"id": acc_2_id, "name": "Conta 2"},
+    ]
+    pending = PendingAction(
+        tool_name="delete_account",
+        arguments={"account_names": ["Conta 1", "Conta 2"], "force_cascade": True},
+        summary="Excluir 2 contas em lote",
+        accounts=accounts,
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.delete_account.return_value = {
+            "message": "Conta processada com sucesso!"
+        }
+        res = execute_pending_action(pending)
+
+    assert mock_ui.delete_account.call_count == 2
+    assert res["success_count"] == 2
+    assert "2 conta(s)" in res["message"]
+
+
 def test_build_action_summary_all_write_tools():
     s_cat = _build_action_summary(
         "create_category", {"name": "Mercado", "category_type": "expense"}, [], []
@@ -496,3 +521,40 @@ def test_build_action_summary_all_write_tools():
         [],
     )
     assert "Nubank Antiga" in s_del_acc and "ATENÇÃO" in s_del_acc
+
+    s_del_accs = _build_action_summary(
+        "delete_account",
+        {"account_names": ["Conta A", "Conta B"], "force_cascade": False},
+        [],
+        [],
+    )
+    assert "2 contas em lote" in s_del_accs
+    assert "Conta A" in s_del_accs and "Conta B" in s_del_accs
+
+
+def test_chat_logging(caplog):
+    """Verify that financial_chat logs start of turn, tool execution, and replies."""
+    import logging
+
+    client = MagicMock()
+    client.chat.completions.create.return_value = _mock_text_response(
+        "Olá! Como posso ajudar?"
+    )
+
+    with caplog.at_level(logging.INFO):
+        reply, pending = chat_with_financial_assistant(
+            messages=[{"role": "user", "content": "Olá assistente"}],
+            client=client,
+        )
+
+    assert reply == "Olá! Como posso ajudar?"
+    assert pending is None
+    assert any("Starting chat turn" in record.message for record in caplog.records)
+    assert any(
+        "Last user message: Olá assistente" in record.message
+        for record in caplog.records
+    )
+    assert any(
+        "Chat turn completed with text reply" in record.message
+        for record in caplog.records
+    )

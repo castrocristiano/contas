@@ -35,3 +35,26 @@ async def test_ui_service_accounts_and_categories():
     # 4. List categories
     cats = UIService.list_categories(category_type=CategoryType.EXPENSE)
     assert any(c["id"] == cat["id"] for c in cats["categories"])
+
+
+@pytest.mark.anyio
+async def test_ui_service_bulk_delete_accounts():
+    from uuid import UUID
+
+    acc_1 = UIService.create_account(
+        name=f"Bulk 1 {uuid4().hex[:6]}",
+        account_type=AccountType.CHECKING,
+        initial_balance="0.00",
+    )
+    acc_2 = UIService.create_account(
+        name=f"Bulk 2 {uuid4().hex[:6]}",
+        account_type=AccountType.SAVINGS,
+        initial_balance="0.00",
+    )
+
+    ids = [acc_1["id"], acc_2["id"]]
+    results = [
+        UIService.delete_account(account_id=UUID(a_id), force_cascade=True)
+        for a_id in ids
+    ]
+    assert all("error" not in r for r in results)
