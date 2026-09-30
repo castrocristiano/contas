@@ -192,3 +192,24 @@ def test_extract_text_from_pdf_encrypted_handling():
         text = extract_text_from_pdf(b"%PDF...", password="correct_password")
         assert "Despesa 1 R$ 50,00" in text
         mock_reader.decrypt.assert_called_once_with("correct_password")
+
+
+def test_extract_installment_from_description():
+    from contas.services.invoice_parser import extract_installment_from_description
+
+    assert extract_installment_from_description("PICPAY*Cristiano D02/04") == (2, 4)
+    assert extract_installment_from_description("MERCADOLIVRE*COMPRA 01/10") == (1, 10)
+    assert extract_installment_from_description("MAGAZINE LUIZA Parc 3/5") == (3, 5)
+    assert extract_installment_from_description("LOJA ABC Parcela 02 de 12") == (2, 12)
+    assert extract_installment_from_description("SUPERMERCADO DIA") == (None, None)
+    assert extract_installment_from_description("DATA 15/09/2026 TESTE") == (None, None)
+
+
+def test_extracted_invoice_item_auto_detects_installments():
+    item = ExtractedInvoiceItem(
+        date="2026-09-05",
+        description="PICPAY*Cristiano D02/04",
+        amount="61.12",
+    )
+    assert item.installment_current == 2
+    assert item.installment_total == 4

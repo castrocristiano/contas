@@ -8,6 +8,7 @@
 - [x] 2. Modelo de Extração e Prompt OpenAI
   - [x] 2.1 Adicionar campo `is_future` em `ExtractedInvoiceItem` em `src/contas/services/invoice_parser.py`
   - [x] 2.2 Atualizar prompt do sistema para extrair tarifas, juros, encargos, multas e marcar itens futuros com `is_future=True`
+  - [x] 2.3 Adicionar extração automática de parcelas embutidas em descrições (ex: `D02/04`, `02/04`, `Parc X de Y`) com `model_validator` e fallback na UI
 
 - [x] 3. Camada de Serviço da UI
   - [x] 3.1 Adicionar parâmetros `status` e `installment_number` em `UIService.record_transaction` em `src/contas/ui/services.py`

@@ -461,6 +461,7 @@ def main():
     elif menu == "🧾 Importar Fatura PDF":
         from contas.services.invoice_parser import (
             check_pdf_encrypted,
+            extract_installment_from_description,
             extract_text_from_pdf,
             parse_invoice_with_openai,
             refine_items_with_chat,
@@ -637,6 +638,16 @@ def main():
                 inst_text = "À vista"
                 cur_inst = item.get("installment_current")
                 tot_inst = item.get("installment_total")
+                if not cur_inst or not tot_inst:
+                    auto_cur, auto_tot = extract_installment_from_description(
+                        str(item.get("description", ""))
+                    )
+                    if auto_cur and auto_tot:
+                        cur_inst = auto_cur
+                        tot_inst = auto_tot
+                        item["installment_current"] = auto_cur
+                        item["installment_total"] = auto_tot
+
                 if cur_inst and tot_inst:
                     inst_text = f"{cur_inst}/{tot_inst}"
 
@@ -741,6 +752,22 @@ def main():
 
                                 cur_inst = orig_item.get("installment_current")
                                 tot_inst = orig_item.get("installment_total")
+
+                                # Verificar se a coluna Parcela foi editada pelo usuário (ex: '2/4')
+                                parcela_str = str(row.get("Parcela", "")).strip()
+                                if parcela_str and parcela_str.lower() != "à vista":
+                                    p_cur, p_tot = extract_installment_from_description(
+                                        parcela_str
+                                    )
+                                    if p_cur and p_tot:
+                                        cur_inst, tot_inst = p_cur, p_tot
+
+                                if not cur_inst or not tot_inst:
+                                    d_cur, d_tot = extract_installment_from_description(
+                                        str(row["Descrição"])
+                                    )
+                                    if d_cur and d_tot:
+                                        cur_inst, tot_inst = d_cur, d_tot
 
                                 res = UIService.record_transaction(
                                     amount=val_str,
