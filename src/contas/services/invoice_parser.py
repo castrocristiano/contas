@@ -37,6 +37,10 @@ class ExtractedInvoiceItem(BaseModel):
         default=None,
         description="Total installments if installment purchase (e.g. 10 for '2/10').",
     )
+    is_future: bool = Field(
+        default=False,
+        description="True if this transaction belongs to future invoices, upcoming releases, or scheduled for future periods.",
+    )
 
 
 class InvoiceExtractionContainer(BaseModel):
@@ -114,13 +118,15 @@ def parse_invoice_with_openai(
 
     system_prompt = (
         "Você é um assistente financeiro especialista em extrair dados de faturas de cartão de crédito brasileiras.\n"
-        "Analise o texto cru da fatura e extraia todas as despesas individuais/compras efetuadas no período.\n"
+        "Analise o texto cru da fatura e extraia todas as despesas individuais, compras, tarifas, juros, IOF, multas e encargos cobrados na fatura atual ou previstos para próximas faturas.\n"
         "Regras:\n"
-        "1. Ignore pagamentos de fatura anterior, encargos/juros já quitados ou linhas de totais/resumos.\n"
-        "2. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, infira pelo cabeçalho/período da fatura.\n"
-        "3. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
-        "4. Se a linha indicar parcelas (ex: '02/10', 'Parcela 3 de 5'), extraia installment_current e installment_total.\n"
-        f"5. Categorize cada compra sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Se não houver categoria adequada, use 'Outros'.\n"
+        "1. Extraia compras, despesas, tarifas de anuidade, juros, encargos financeiros, multas e IOF cobranças como despesas com valor positivo.\n"
+        "2. Ignore apenas linhas que representem pagamentos efetuados pelo cliente (ex: 'Pagamento recebido', 'Pagamento de fatura'), e linhas de totais/resumos.\n"
+        "3. Identifique transações de faturas futuras (seção 'Próximas faturas', 'Lançamentos futuros' ou datas futuras ao fechamento da fatura) e marque 'is_future=True'. Para transações da fatura atual, marque 'is_future=False'.\n"
+        "4. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, infira pelo cabeçalho/período da fatura.\n"
+        "5. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
+        "6. Se a linha indicar parcelas (ex: '02/10', 'Parcela 3 de 5'), extraia installment_current e installment_total.\n"
+        f"7. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
     )
 
     completion = client.beta.chat.completions.parse(

@@ -17,11 +17,21 @@ def test_extracted_invoice_item_schema():
         category_suggestion="Alimentação",
         installment_current=1,
         installment_total=3,
+        is_future=False,
     )
     assert item.date == "2026-09-15"
     assert item.amount == "184.50"
     assert item.installment_current == 1
     assert item.installment_total == 3
+    assert item.is_future is False
+
+    future_item = ExtractedInvoiceItem(
+        date="2026-10-15",
+        description="IOF Próxima Fatura",
+        amount="12.30",
+        is_future=True,
+    )
+    assert future_item.is_future is True
 
 
 def test_effective_openai_api_key_fallbacks():

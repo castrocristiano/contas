@@ -1,4 +1,4 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 
@@ -39,7 +39,6 @@ async def test_ui_service_accounts_and_categories():
 
 @pytest.mark.anyio
 async def test_ui_service_bulk_delete_accounts():
-    from uuid import UUID
 
     acc_1 = UIService.create_account(
         name=f"Bulk 1 {uuid4().hex[:6]}",
@@ -62,7 +61,6 @@ async def test_ui_service_bulk_delete_accounts():
 
 @pytest.mark.anyio
 async def test_ui_service_bulk_delete_transactions():
-    from uuid import UUID
 
     acc = UIService.create_account(
         name=f"Tx Acc {uuid4().hex[:6]}",
@@ -90,3 +88,47 @@ async def test_ui_service_bulk_delete_transactions():
 
     # Clean up account
     UIService.delete_account(account_id=acc_id, force_cascade=True)
+
+
+@pytest.mark.anyio
+async def test_ui_service_record_transaction_with_status_and_installment(monkeypatch):
+    from unittest.mock import AsyncMock, MagicMock
+
+    from contas.models.transaction import TransactionStatus
+    from contas.schemas.transaction import RecordTransactionInput
+
+    mock_server = MagicMock()
+    mock_fn = AsyncMock()
+    mock_fn.return_value = {
+        "id": str(uuid4()),
+        "status": "pending",
+        "amount": "120.00",
+        "total_installments": 5,
+        "installment_number": 3,
+    }
+    mock_server._tool_manager._tools = {"record_transaction": MagicMock(fn=mock_fn)}
+    monkeypatch.setattr("contas.ui.services.get_mcp_server", lambda: mock_server)
+
+    acc_id = uuid4()
+    t_pending = UIService.record_transaction(
+        amount="120.00",
+        transaction_type="expense",
+        source_account_id=acc_id,
+        description="Compra Futura Parcela 3/5",
+        status=TransactionStatus.PENDING.value,
+        total_installments=5,
+        installment_number=3,
+    )
+
+    assert "error" not in t_pending
+    assert t_pending["status"] == "pending"
+
+    # Verify handler received correct RecordTransactionInput
+    call_args = mock_fn.call_args
+    assert call_args is not None
+    payload: RecordTransactionInput = call_args.kwargs["payload"]
+    assert payload.amount == "120.00"
+    assert payload.status == TransactionStatus.PENDING
+    assert payload.total_installments == 5
+    assert payload.installment_number == 3
+    assert payload.source_account_id == acc_id

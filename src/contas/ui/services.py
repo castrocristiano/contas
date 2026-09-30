@@ -136,7 +136,9 @@ class UIService:
         category_id: UUID | None = None,
         description: str = "",
         transaction_date: str | None = None,
+        status: str = "cleared",
         total_installments: int | None = None,
+        installment_number: int | None = None,
         total_amount: str | None = None,
     ) -> dict:
         server = get_mcp_server()
@@ -151,7 +153,9 @@ class UIService:
                     category_id=category_id,
                     description=description,
                     transaction_date=transaction_date,
+                    status=status,
                     total_installments=total_installments,
+                    installment_number=installment_number,
                     total_amount=total_amount,
                 )
             )

@@ -145,6 +145,20 @@ def test_record_transaction_input_transfer_rejects_same_account():
         )
 
 
+def test_record_transaction_input_pending_and_installments():
+    payload = RecordTransactionInput(
+        amount="45.90",
+        transaction_type=TransactionType.EXPENSE,
+        source_account_id=uuid4(),
+        status=TransactionStatus.PENDING,
+        total_installments=6,
+        installment_number=2,
+    )
+    assert payload.status == TransactionStatus.PENDING
+    assert payload.total_installments == 6
+    assert payload.installment_number == 2
+
+
 def test_list_accounts_input_default():
     from contas.schemas.account import ListAccountsInput
 
