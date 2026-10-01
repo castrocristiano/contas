@@ -47,6 +47,7 @@ class Transaction:
     category_id: UUID | None = None
     status: TransactionStatus = TransactionStatus.CLEARED
     transaction_date: datetime = field(default_factory=lambda: datetime.now(UTC))
+    due_date: datetime | None = None
     description: str = ""
     installment_id: UUID | None = None
     installment_number: int | None = None

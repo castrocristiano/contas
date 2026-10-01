@@ -286,3 +286,71 @@ def test_delete_transaction_input_extra_fields_forbidden():
 
     with pytest.raises(ValidationError):
         DeleteTransactionInput(transaction_id=uuid4(), unexpected=True)
+
+
+def test_create_account_input_credit_card():
+    payload = CreateAccountInput(
+        name="Cartão Nubank",
+        account_type=AccountType.CREDIT_CARD,
+        initial_balance="0.00",
+    )
+    assert payload.account_type == AccountType.CREDIT_CARD
+    assert payload.account_type.value == "credit_card"
+
+
+def test_record_transaction_input_with_due_date():
+    payload = RecordTransactionInput(
+        amount="150.00",
+        transaction_type=TransactionType.EXPENSE,
+        source_account_id=uuid4(),
+        transaction_date="2026-10-01",
+        due_date="2026-10-15",
+    )
+    assert payload.due_date == "2026-10-15"
+    assert payload.transaction_date == "2026-10-01"
+
+
+def test_get_statement_input_date_type():
+    from contas.schemas.transaction import GetStatementInput
+
+    acc_id = uuid4()
+    # Default is transaction_date
+    p1 = GetStatementInput(
+        account_id=acc_id, start_date="2026-10-01", end_date="2026-10-31"
+    )
+    assert p1.date_type == "transaction_date"
+
+    # Explicit due_date
+    p2 = GetStatementInput(
+        account_id=acc_id,
+        start_date="2026-10-01",
+        end_date="2026-10-31",
+        date_type="due_date",
+    )
+    assert p2.date_type == "due_date"
+
+    # Invalid date_type raises ValidationError
+    with pytest.raises(ValidationError):
+        GetStatementInput(
+            account_id=acc_id,
+            start_date="2026-10-01",
+            end_date="2026-10-31",
+            date_type="invalid_date",
+        )
+
+
+def test_statement_item_with_due_date():
+    from datetime import UTC, datetime
+
+    from contas.schemas.transaction import StatementItem
+
+    item = StatementItem(
+        id=uuid4(),
+        transaction_date=datetime(2026, 10, 1, tzinfo=UTC),
+        due_date=datetime(2026, 10, 10, tzinfo=UTC),
+        amount="100.00",
+        transaction_type=TransactionType.EXPENSE,
+        description="Fatura",
+        status=TransactionStatus.CLEARED,
+    )
+    assert item.due_date == datetime(2026, 10, 10, tzinfo=UTC)
