@@ -1,6 +1,6 @@
 # Feature Specification: Refatoração da Arquitetura para Clean Architecture (012-clean-architecture-refactoring)
 
-**Feature Branch**: `refactor/clean-architecture`
+**Feature Branch**: `feature/clean-architecture`
 
 **Created**: 2026-09-30
 
