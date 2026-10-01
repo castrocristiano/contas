@@ -377,11 +377,27 @@ def main():
             categories_data = UIService.list_categories()
             categories = categories_data.get("categories", [])
 
-            with st.form("form_transaction"):
+            # Seleções fora do form para permitir lógica condicional
+            pre_col1, pre_col2 = st.columns(2)
+            with pre_col1:
                 tipo = st.selectbox(
                     "Tipo de Transação", ["Despesa", "Receita", "Transferência"]
                 )
+            with pre_col2:
+                conta_origem_name = st.selectbox(
+                    "Conta de Origem",
+                    options=[a["name"] for a in accounts],
+                )
 
+            selected_account = next(
+                (a for a in accounts if a["name"] == conta_origem_name), None
+            )
+            is_credit_card = (
+                selected_account is not None
+                and selected_account.get("account_type") == "credit_card"
+            )
+
+            with st.form("form_transaction"):
                 col1, col2 = st.columns(2)
                 with col1:
                     valor = st.text_input("Valor (R$)", placeholder="ex: 150.00")
@@ -393,18 +409,27 @@ def main():
                     data_tx = st.date_input(
                         "Data do Lançamento", value=datetime.now(UTC).date()
                     )
-                    data_venc = st.date_input("Data de Vencimento", value=data_tx)
-                    conta_origem = st.selectbox(
-                        "Conta de Origem",
-                        options=[a["name"] for a in accounts],
-                    )
+                    if is_credit_card:
+                        data_venc = st.date_input(
+                            "📅 Data de Vencimento da Fatura",
+                            value=data_tx,
+                            help="Data de vencimento da fatura do cartão de crédito.",
+                        )
+                    else:
+                        data_venc = st.date_input(
+                            "Data de Vencimento",
+                            value=data_tx,
+                            help="Data de vencimento do pagamento (opcional para contas comuns).",
+                        )
 
                 conta_dest = None
                 if tipo == "Transferência":
                     conta_dest = st.selectbox(
                         "Conta de Destino",
                         options=[
-                            a["name"] for a in accounts if a["name"] != conta_origem
+                            a["name"]
+                            for a in accounts
+                            if a["name"] != conta_origem_name
                         ],
                     )
 
@@ -445,7 +470,7 @@ def main():
                 if submitted:
                     try:
                         acc_source = next(
-                            a for a in accounts if a["name"] == conta_origem
+                            a for a in accounts if a["name"] == conta_origem_name
                         )
                         acc_dest = next(
                             (a for a in accounts if a["name"] == conta_dest), None
