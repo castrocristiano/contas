@@ -1,12 +1,46 @@
 import io
 import json
+import re
 from typing import Any
 
 from openai import OpenAI
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypdf import PdfReader
 
 from contas.config import settings
+
+
+def extract_installment_from_description(text: str) -> tuple[int | None, int | None]:
+    """Extract (installment_current, installment_total) from description strings.
+
+    Supports patterns like:
+    - 02/04, 2/10, 02/10, 1/12
+    - D02/04, P03/10 (letters directly attached to digits)
+    - Parcela 02 de 10, Parc 2/4, Parcela 2/10
+    """
+    if not text:
+        return None, None
+
+    # 1. Pattern: Parcela X de Y / Parc X de Y
+    m_de = re.search(
+        r"(?:parcela|parc\.?)\s*(\d{1,2})\s*(?:de|\/)\s*(\d{1,2})",
+        text,
+        re.IGNORECASE,
+    )
+    if m_de:
+        cur, tot = int(m_de.group(1)), int(m_de.group(2))
+        if 1 <= cur <= tot:
+            return cur, tot
+
+    # 2. Pattern: X/Y with 1 or 2 digits, possibly preceded by word/letter or space (e.g. 'D02/04', ' 02/04', '-02/04')
+    # Ensures it's not a date like 05/09/2026 or DD/MM
+    matches = re.finditer(r"(?:^|[\s\-_A-Za-z])(\d{1,2})\/(\d{1,2})(?:$|[^\d\/])", text)
+    for m in matches:
+        cur, tot = int(m.group(1)), int(m.group(2))
+        if 1 <= cur <= tot and tot > 1:
+            return cur, tot
+
+    return None, None
 
 
 class ExtractedInvoiceItem(BaseModel):
@@ -37,6 +71,20 @@ class ExtractedInvoiceItem(BaseModel):
         default=None,
         description="Total installments if installment purchase (e.g. 10 for '2/10').",
     )
+    is_future: bool = Field(
+        default=False,
+        description="True if this transaction belongs to future invoices, upcoming releases, or scheduled for future periods.",
+    )
+
+    @model_validator(mode="after")
+    def populate_installments_from_description(self) -> "ExtractedInvoiceItem":
+        """Auto-detect installment numbers from description if not already set or invalid."""
+        if self.installment_current is None or self.installment_total is None:
+            cur, tot = extract_installment_from_description(self.description)
+            if cur is not None and tot is not None:
+                self.installment_current = cur
+                self.installment_total = tot
+        return self
 
 
 class InvoiceExtractionContainer(BaseModel):
@@ -114,13 +162,15 @@ def parse_invoice_with_openai(
 
     system_prompt = (
         "Você é um assistente financeiro especialista em extrair dados de faturas de cartão de crédito brasileiras.\n"
-        "Analise o texto cru da fatura e extraia todas as despesas individuais/compras efetuadas no período.\n"
+        "Analise o texto cru da fatura e extraia todas as despesas individuais, compras, tarifas, juros, IOF, multas e encargos cobrados na fatura atual ou previstos para próximas faturas.\n"
         "Regras:\n"
-        "1. Ignore pagamentos de fatura anterior, encargos/juros já quitados ou linhas de totais/resumos.\n"
-        "2. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, infira pelo cabeçalho/período da fatura.\n"
-        "3. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
-        "4. Se a linha indicar parcelas (ex: '02/10', 'Parcela 3 de 5'), extraia installment_current e installment_total.\n"
-        f"5. Categorize cada compra sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Se não houver categoria adequada, use 'Outros'.\n"
+        "1. Extraia compras, despesas, tarifas de anuidade, juros, encargos financeiros, multas e IOF cobranças como despesas com valor positivo.\n"
+        "2. Ignore apenas linhas que representem pagamentos efetuados pelo cliente (ex: 'Pagamento recebido', 'Pagamento de fatura'), e linhas de totais/resumos.\n"
+        "3. Identifique transações de faturas futuras (seção 'Próximas faturas', 'Lançamentos futuros' ou datas futuras ao fechamento da fatura) e marque 'is_future=True'. Para transações da fatura atual, marque 'is_future=False'.\n"
+        "4. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, infira pelo cabeçalho/período da fatura.\n"
+        "5. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
+        "6. Se a linha indicar parcelas em qualquer formato (ex: '02/10', 'Parcela 3 de 5', 'D02/04', '02/04' no final do nome do estabelecimento ou na descrição), extraia obrigatoriamente installment_current e installment_total.\n"
+        f"7. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
     )
 
     completion = client.beta.chat.completions.parse(
