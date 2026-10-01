@@ -99,8 +99,8 @@ def main():
         # Seção de Extrato
         st.subheader("📜 Extrato de Movimentações")
         if accounts:
-            filter_col1, filter_col2, filter_col3, filter_col4 = st.columns(
-                [2, 1, 1, 1]
+            filter_col1, filter_col_type, filter_col2, filter_col3, filter_col4 = (
+                st.columns([2, 1.5, 1, 1, 1])
             )
             with filter_col1:
                 selected_acc_name = st.selectbox(
@@ -110,6 +110,16 @@ def main():
                 )
                 selected_acc = next(
                     a for a in accounts if a["name"] == selected_acc_name
+                )
+
+            with filter_col_type:
+                tipo_data = st.selectbox(
+                    "Filtrar por",
+                    options=["Data Lançamento", "Data Vencimento"],
+                    index=0,
+                )
+                date_type_val = (
+                    "due_date" if tipo_data == "Data Vencimento" else "transaction_date"
                 )
 
             with filter_col2:
@@ -130,6 +140,7 @@ def main():
                     start_date=start_date.isoformat(),
                     end_date=end_date.isoformat(),
                     include_pending=include_pending,
+                    date_type=date_type_val,
                 )
 
                 txs = statement.get("transactions", [])
@@ -185,6 +196,13 @@ def main():
                                 "Data": datetime.fromisoformat(
                                     t["transaction_date"]
                                 ).date(),
+                                "Vencimento": datetime.fromisoformat(
+                                    t["due_date"]
+                                ).date()
+                                if t.get("due_date")
+                                else datetime.fromisoformat(
+                                    t["transaction_date"]
+                                ).date(),
                                 "Descrição": t["description"],
                                 "Categoria": t.get("category") or "—",
                                 "Tipo": t["transaction_type"].upper(),
@@ -207,7 +225,10 @@ def main():
                             ),
                             "ID": st.column_config.TextColumn("ID", disabled=True),
                             "Data": st.column_config.DateColumn(
-                                "Data", format="DD/MM/YYYY", disabled=True
+                                "Data Lançamento", format="DD/MM/YYYY", disabled=True
+                            ),
+                            "Vencimento": st.column_config.DateColumn(
+                                "Vencimento", format="DD/MM/YYYY", disabled=True
                             ),
                             "Descrição": st.column_config.TextColumn(
                                 "Descrição", disabled=True
@@ -229,6 +250,7 @@ def main():
                         disabled=[
                             "ID",
                             "Data",
+                            "Vencimento",
                             "Descrição",
                             "Categoria",
                             "Tipo",
@@ -371,6 +393,7 @@ def main():
                     data_tx = st.date_input(
                         "Data do Lançamento", value=datetime.now(UTC).date()
                     )
+                    data_venc = st.date_input("Data de Vencimento", value=data_tx)
                     conta_origem = st.selectbox(
                         "Conta de Origem",
                         options=[a["name"] for a in accounts],
@@ -447,6 +470,7 @@ def main():
                             category_id=UUID(cat_obj["id"]) if cat_obj else None,
                             description=descricao,
                             transaction_date=f"{data_tx.isoformat()}T12:00:00Z",
+                            due_date=f"{data_venc.isoformat()}T12:00:00Z",
                             total_installments=qtd_parcelas if is_parcelada else None,
                             total_amount=valor if is_parcelada else None,
                         )
@@ -884,13 +908,13 @@ def main():
         store_logs = st.sidebar.toggle(
             "Registrar chamadas no OpenAI Logs",
             value=settings.openai_store,
-            help="Envia o parâmetro 'store: true' nas requisições da OpenAI para permitir visualização em https://platform.openai.com/logs.",
+            help="Envia o parâmetro 'store: true' nas requisições da OpenAI para permitir visualização na aba 'Completions' em https://platform.openai.com/logs/completions.",
             key="toggle_openai_store",
         )
         settings.openai_store = store_logs
         if store_logs:
             st.sidebar.caption(
-                "🟢 Registro ativo no [OpenAI Logs](https://platform.openai.com/logs)."
+                "🟢 Registro ativo na aba [Completions](https://platform.openai.com/logs/completions) do OpenAI Logs."
             )
         else:
             st.sidebar.caption("⚪ Registro desativado.")
@@ -1122,7 +1146,15 @@ def main():
                         AccountType.SAVINGS,
                         AccountType.INVESTMENT,
                         AccountType.CASH,
+                        AccountType.CREDIT_CARD,
                     ],
+                    format_func=lambda x: {
+                        AccountType.CHECKING: "Conta Corrente",
+                        AccountType.SAVINGS: "Poupança",
+                        AccountType.INVESTMENT: "Investimento",
+                        AccountType.CASH: "Dinheiro / Carteira",
+                        AccountType.CREDIT_CARD: "Cartão de Crédito",
+                    }.get(x, x.value),
                 )
                 acc_init = st.text_input("Saldo Inicial (R$)", value="0.00")
                 if st.form_submit_button("Criar Conta"):

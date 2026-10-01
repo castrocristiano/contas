@@ -598,3 +598,94 @@ def test_chat_passes_openai_store_parameter():
 
     call_kwargs = client.chat.completions.create.call_args.kwargs
     assert call_kwargs.get("store") is True
+
+
+def test_execute_pending_action_record_transaction_with_due_date():
+    accounts = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "Nubank",
+            "balance": "1000.00",
+        }
+    ]
+    pending = PendingAction(
+        tool_name="record_transaction",
+        arguments={
+            "amount": "120.00",
+            "transaction_type": "expense",
+            "account_name": "Nubank",
+            "description": "Conta de Luz",
+            "transaction_date": "2026-10-01",
+            "due_date": "2026-10-15",
+        },
+        summary="Despesa de R$ 120,00",
+        accounts=accounts,
+        categories=[],
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.record_transaction.return_value = {"id": "tx-001"}
+        execute_pending_action(pending)
+
+    mock_ui.record_transaction.assert_called_once()
+    call_kwargs = mock_ui.record_transaction.call_args.kwargs
+    assert call_kwargs["transaction_date"] == "2026-10-01T12:00:00Z"
+    assert call_kwargs["due_date"] == "2026-10-15T12:00:00Z"
+
+
+def test_execute_read_tool_get_statement_with_date_type():
+    accounts = [
+        {
+            "id": "00000000-0000-0000-0000-000000000001",
+            "name": "Nubank",
+            "balance": "100.00",
+        }
+    ]
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.get_statement.return_value = {
+            "account": {"name": "Nubank"},
+            "transactions": [],
+        }
+        _execute_read_tool(
+            "get_statement",
+            {
+                "account_name": "Nubank",
+                "date_type": "due_date",
+                "start_date": "2026-10-01",
+                "end_date": "2026-10-31",
+            },
+            accounts=accounts,
+            categories=[],
+        )
+
+    mock_ui.get_statement.assert_called_once()
+    call_kwargs = mock_ui.get_statement.call_args.kwargs
+    assert call_kwargs["date_type"] == "due_date"
+
+
+def test_build_action_summary_due_date_and_credit_card():
+    s_tx = _build_action_summary(
+        "record_transaction",
+        {
+            "amount": "150.00",
+            "transaction_type": "expense",
+            "account_name": "Nubank",
+            "description": "Internet",
+            "transaction_date": "2026-10-01",
+            "due_date": "2026-10-10",
+        },
+        [],
+        [],
+    )
+    assert "Vencimento: 2026-10-10" in s_tx
+
+    s_acc = _build_action_summary(
+        "create_account",
+        {
+            "name": "Cartão XP",
+            "account_type": "credit_card",
+            "initial_balance": "0.00",
+        },
+        [],
+        [],
+    )
+    assert "Cartão de Crédito" in s_acc

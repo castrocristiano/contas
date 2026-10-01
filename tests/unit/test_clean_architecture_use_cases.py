@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, datetime
 from decimal import Decimal
 from uuid import UUID, uuid4
 
@@ -154,12 +154,27 @@ class InMemoryTransactionRepository(ITransactionRepository):
         account_id: UUID,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        date_type: str = "transaction_date",
         limit: int = 50,
         offset: int = 0,
     ) -> list[Transaction]:
         res = [
             t for t in self.transactions.values() if t.source_account_id == account_id
         ]
+        if start_date or end_date:
+            filtered = []
+            for t in res:
+                d = (
+                    (t.due_date or t.transaction_date)
+                    if date_type == "due_date"
+                    else t.transaction_date
+                )
+                if start_date and d < start_date:
+                    continue
+                if end_date and d > end_date:
+                    continue
+                filtered.append(t)
+            res = filtered
         return res[offset : offset + limit]
 
     async def list_by_installment_id(self, installment_id: UUID) -> list[Transaction]:
@@ -190,6 +205,7 @@ class InMemoryTransactionRepository(ITransactionRepository):
         account_id: UUID,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        date_type: str = "transaction_date",
     ) -> dict[str, Decimal]:
         return {
             "income": Decimal("0.00"),
@@ -289,3 +305,174 @@ async def test_get_financial_summary_use_case():
     # With reference_date
     res2 = await uc.execute(GetFinancialSummaryInput(reference_date="2026-05-15"))
     assert res2["reference_date"] == "2026-05-15"
+
+
+@pytest.mark.anyio
+async def test_create_credit_card_account():
+    account_repo = InMemoryAccountRepository()
+    uc = CreateAccountUseCase(account_repo)
+
+    res = await uc.execute(
+        CreateAccountInput(
+            name="Cartão Nubank",
+            account_type=AccountType.CREDIT_CARD,
+            initial_balance="0.00",
+        )
+    )
+    assert res["account_type"] == "credit_card"
+    created = await account_repo.get_by_id(UUID(res["id"]))
+    assert created is not None
+    assert created.account_type == AccountType.CREDIT_CARD
+
+
+@pytest.mark.anyio
+async def test_record_transaction_with_due_date():
+    account_repo = InMemoryAccountRepository()
+    tx_repo = InMemoryTransactionRepository()
+    cat_repo = InMemoryCategoryRepository()
+
+    acc = Account(
+        name="Cartão",
+        account_type=AccountType.CREDIT_CARD,
+        balance=Decimal("0.00"),
+    )
+    await account_repo.create(acc)
+
+    uc = RecordTransactionUseCase(account_repo, tx_repo, cat_repo)
+
+    # 1. With explicit due_date
+    res1 = await uc.execute(
+        RecordTransactionInput(
+            amount="250.00",
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=acc.id,
+            description="Compra Online",
+            transaction_date="2026-10-01",
+            due_date="2026-10-20",
+        )
+    )
+    tx1 = await tx_repo.get_by_id(UUID(res1["id"]))
+    assert tx1.due_date == datetime(2026, 10, 20, tzinfo=UTC)
+    assert "2026-10-20" in res1["due_date"]
+
+    # 2. Without due_date (defaults to transaction_date)
+    res2 = await uc.execute(
+        RecordTransactionInput(
+            amount="50.00",
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=acc.id,
+            description="Lanche",
+            transaction_date="2026-10-02",
+        )
+    )
+    tx2 = await tx_repo.get_by_id(UUID(res2["id"]))
+    assert tx2.due_date == datetime(2026, 10, 2, tzinfo=UTC)
+    assert "2026-10-02" in res2["due_date"]
+
+
+@pytest.mark.anyio
+async def test_record_installment_transaction_with_due_date():
+    account_repo = InMemoryAccountRepository()
+    tx_repo = InMemoryTransactionRepository()
+    cat_repo = InMemoryCategoryRepository()
+
+    acc = Account(
+        name="Cartão",
+        account_type=AccountType.CREDIT_CARD,
+        balance=Decimal("0.00"),
+    )
+    await account_repo.create(acc)
+
+    uc = RecordTransactionUseCase(account_repo, tx_repo, cat_repo)
+
+    res = await uc.execute(
+        RecordTransactionInput(
+            amount="100.00",
+            total_amount="300.00",
+            total_installments=3,
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=acc.id,
+            description="Eletrônico",
+            transaction_date="2026-10-05",
+            due_date="2026-10-25",
+        )
+    )
+    installments = await tx_repo.list_by_installment_id(UUID(res["installment_id"]))
+    assert len(installments) == 3
+    # Sorted by installment_number
+    installments.sort(key=lambda x: x.installment_number)
+
+    assert installments[0].transaction_date == datetime(2026, 10, 5, tzinfo=UTC)
+    assert installments[0].due_date == datetime(2026, 10, 25, tzinfo=UTC)
+
+    assert installments[1].transaction_date == datetime(2026, 11, 5, tzinfo=UTC)
+    assert installments[1].due_date == datetime(2026, 11, 25, tzinfo=UTC)
+
+    assert installments[2].transaction_date == datetime(2026, 12, 5, tzinfo=UTC)
+    assert installments[2].due_date == datetime(2026, 12, 25, tzinfo=UTC)
+
+
+@pytest.mark.anyio
+async def test_get_statement_filter_by_date_type():
+    from contas.application.use_cases.transactions import GetStatementUseCase
+    from contas.schemas.transaction import GetStatementInput
+
+    account_repo = InMemoryAccountRepository()
+    tx_repo = InMemoryTransactionRepository()
+    cat_repo = InMemoryCategoryRepository()
+
+    acc = Account(
+        name="Cartão",
+        account_type=AccountType.CREDIT_CARD,
+        balance=Decimal("0.00"),
+    )
+    await account_repo.create(acc)
+
+    # tx1: transaction_date in Sept, due_date in Oct
+    tx1 = Transaction(
+        amount=Decimal("100.00"),
+        transaction_type=TransactionType.EXPENSE,
+        source_account_id=acc.id,
+        description="Compra Setembro",
+        transaction_date=datetime(2026, 9, 28, tzinfo=UTC),
+        due_date=datetime(2026, 10, 10, tzinfo=UTC),
+    )
+    await tx_repo.create(tx1)
+
+    # tx2: transaction_date in Oct, due_date in Nov
+    tx2 = Transaction(
+        amount=Decimal("200.00"),
+        transaction_type=TransactionType.EXPENSE,
+        source_account_id=acc.id,
+        description="Compra Outubro",
+        transaction_date=datetime(2026, 10, 5, tzinfo=UTC),
+        due_date=datetime(2026, 11, 10, tzinfo=UTC),
+    )
+    await tx_repo.create(tx2)
+
+    uc = GetStatementUseCase(account_repo, tx_repo, cat_repo)
+
+    # Query with date_type="transaction_date" for October (2026-10-01 to 2026-10-31)
+    res_tx_date = await uc.execute(
+        GetStatementInput(
+            account_id=acc.id,
+            start_date="2026-10-01",
+            end_date="2026-10-31",
+            date_type="transaction_date",
+        )
+    )
+    assert len(res_tx_date["transactions"]) == 1
+    assert res_tx_date["transactions"][0]["description"] == "Compra Outubro"
+
+    # Query with date_type="due_date" for October (2026-10-01 to 2026-10-31)
+    res_due_date = await uc.execute(
+        GetStatementInput(
+            account_id=acc.id,
+            start_date="2026-10-01",
+            end_date="2026-10-31",
+            date_type="due_date",
+        )
+    )
+    assert len(res_due_date["transactions"]) == 1
+    assert res_due_date["transactions"][0]["description"] == "Compra Setembro"
+    assert "2026-10-10" in res_due_date["transactions"][0]["due_date"]

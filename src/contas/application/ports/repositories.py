@@ -66,6 +66,7 @@ class ITransactionRepository(Protocol):
         account_id: UUID,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        date_type: str = "transaction_date",
         limit: int = 50,
         offset: int = 0,
     ) -> list[Transaction]: ...
@@ -85,6 +86,7 @@ class ITransactionRepository(Protocol):
         account_id: UUID,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        date_type: str = "transaction_date",
     ) -> dict[str, Decimal]: ...
 
 

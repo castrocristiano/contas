@@ -49,6 +49,10 @@ class RecordTransactionInput(BaseModel):
         default=None,
         description="ISO 8601 datetime with timezone (e.g., '2026-09-19T14:00:00-03:00'). Defaults to current time.",
     )
+    due_date: str | None = Field(
+        default=None,
+        description="ISO 8601 date or datetime for the due date (data de vencimento). Defaults to transaction_date if omitted.",
+    )
     status: TransactionStatus = Field(
         default=TransactionStatus.CLEARED,
         description="Settlement status. 'pending' for scheduled future transactions.",
@@ -110,6 +114,7 @@ class RecordTransactionResponse(BaseModel):
     transaction_type: TransactionType
     status: TransactionStatus
     transaction_date: datetime
+    due_date: datetime | None = None
     description: str
     source_account: SourceAccountSummary
     category_id: UUID | None = None
@@ -145,6 +150,10 @@ class GetStatementInput(BaseModel):
         le=500,
         description="Maximum number of transactions to return. Default: 50.",
     )
+    date_type: str = Field(
+        default="transaction_date",
+        description="Field to filter by: 'transaction_date' (data do lançamento) or 'due_date' (data de vencimento). Defaults to 'transaction_date'.",
+    )
 
     @model_validator(mode="after")
     def validate_dates(self) -> "GetStatementInput":
@@ -158,6 +167,12 @@ class GetStatementInput(BaseModel):
 
         if s_date > e_date:
             raise ValueError("start_date must be less than or equal to end_date")
+
+        if self.date_type not in ("transaction_date", "due_date"):
+            raise ValueError(
+                "date_type must be either 'transaction_date' or 'due_date'"
+            )
+
         return self
 
 
@@ -174,6 +189,7 @@ class StatementPeriod(BaseModel):
 
     start: str
     end: str
+    date_type: str = "transaction_date"
 
 
 class StatementItem(BaseModel):
@@ -181,6 +197,7 @@ class StatementItem(BaseModel):
 
     id: UUID
     transaction_date: datetime
+    due_date: datetime | None = None
     description: str
     amount: str
     transaction_type: TransactionType
