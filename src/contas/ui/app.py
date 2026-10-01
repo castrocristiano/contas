@@ -16,6 +16,10 @@ from contas.services.financial_chat import (
 )
 from contas.ui.services import UIService
 
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # Configuração da Página
