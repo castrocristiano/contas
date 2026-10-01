@@ -908,13 +908,13 @@ def main():
         store_logs = st.sidebar.toggle(
             "Registrar chamadas no OpenAI Logs",
             value=settings.openai_store,
-            help="Envia o parâmetro 'store: true' nas requisições da OpenAI para permitir visualização em https://platform.openai.com/logs.",
+            help="Envia o parâmetro 'store: true' nas requisições da OpenAI para permitir visualização na aba 'Completions' em https://platform.openai.com/logs/completions.",
             key="toggle_openai_store",
         )
         settings.openai_store = store_logs
         if store_logs:
             st.sidebar.caption(
-                "🟢 Registro ativo no [OpenAI Logs](https://platform.openai.com/logs)."
+                "🟢 Registro ativo na aba [Completions](https://platform.openai.com/logs/completions) do OpenAI Logs."
             )
         else:
             st.sidebar.caption("⚪ Registro desativado.")
