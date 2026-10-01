@@ -227,6 +227,32 @@ def test_get_financial_summary_input_default():
 
     payload = GetFinancialSummaryInput()
     assert payload.reference_date is None
+    assert payload.month is None
+    assert payload.year is None
+
+
+def test_get_financial_summary_input_month_year():
+    from contas.schemas.transaction import GetFinancialSummaryInput
+
+    payload = GetFinancialSummaryInput(month=10, year=2026)
+    assert payload.month == 10
+    assert payload.year == 2026
+
+    # Invalid month
+    with pytest.raises(ValidationError):
+        GetFinancialSummaryInput(month=0)
+    with pytest.raises(ValidationError):
+        GetFinancialSummaryInput(month=13)
+
+    # Invalid year
+    with pytest.raises(ValidationError):
+        GetFinancialSummaryInput(year=1899)
+    with pytest.raises(ValidationError):
+        GetFinancialSummaryInput(year=2101)
+
+    # Extra fields forbidden
+    with pytest.raises(ValidationError):
+        GetFinancialSummaryInput(extra_field="test")
 
 
 def test_delete_transaction_input_valid():

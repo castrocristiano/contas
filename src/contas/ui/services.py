@@ -165,6 +165,7 @@ class UIService:
     def get_financial_summary(
         month: int | None = None,
         year: int | None = None,
+        reference_date: str | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_financial_summary"].fn
@@ -173,6 +174,7 @@ class UIService:
                 payload=GetFinancialSummaryInput(
                     month=month,
                     year=year,
+                    reference_date=reference_date,
                 )
             )
         )
