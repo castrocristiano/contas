@@ -1,5 +1,5 @@
 import logging
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from uuid import UUID
 
 import pandas as pd
@@ -8,7 +8,7 @@ import streamlit as st
 from contas.config import settings
 from contas.models.account import AccountType
 from contas.models.category import CategoryType
-from contas.models.transaction import TransactionType
+from contas.models.transaction import TransactionStatus, TransactionType
 from contas.services.financial_chat import (
     PendingAction,
     chat_with_financial_assistant,
@@ -461,6 +461,7 @@ def main():
     elif menu == "🧾 Importar Fatura PDF":
         from contas.services.invoice_parser import (
             check_pdf_encrypted,
+            extract_installment_from_description,
             extract_text_from_pdf,
             parse_invoice_with_openai,
             refine_items_with_chat,
@@ -597,6 +598,21 @@ def main():
                 "Confira os lançamentos abaixo. Marque ou desmarque os que deseja cadastrar no sistema."
             )
 
+            # Opções de importação e parcelas futuras
+            col_opt1, col_opt2 = st.columns([1, 1])
+            with col_opt1:
+                include_future_txs = st.checkbox(
+                    "📅 Listar lançamentos de faturas futuras",
+                    value=True,
+                    help="Exibe despesas e parcelas listadas para próximas faturas no PDF.",
+                )
+            with col_opt2:
+                project_future_installments = st.checkbox(
+                    "🔮 Projetar e lançar parcelas futuras restantes como pendentes",
+                    value=False,
+                    help="Se uma compra for parcela 2/10, lança automaticamente as parcelas 3 a 10 como despesas pendentes nos meses seguintes.",
+                )
+
             # Controles de seleção mestre
             invoice_select_key = "invoice_select_all"
             if invoice_select_key not in st.session_state:
@@ -615,95 +631,209 @@ def main():
             default_inv_select = st.session_state[invoice_select_key]
             df_import = []
             for idx, item in enumerate(items):
+                is_fut = bool(item.get("is_future", False))
+                if not include_future_txs and is_fut:
+                    continue
+
                 inst_text = "À vista"
-                if item.get("installment_current") and item.get("installment_total"):
-                    inst_text = (
-                        f"{item['installment_current']}/{item['installment_total']}"
+                cur_inst = item.get("installment_current")
+                tot_inst = item.get("installment_total")
+                if not cur_inst or not tot_inst:
+                    auto_cur, auto_tot = extract_installment_from_description(
+                        str(item.get("description", ""))
                     )
+                    if auto_cur and auto_tot:
+                        cur_inst = auto_cur
+                        tot_inst = auto_tot
+                        item["installment_current"] = auto_cur
+                        item["installment_total"] = auto_tot
+
+                if cur_inst and tot_inst:
+                    inst_text = f"{cur_inst}/{tot_inst}"
+
+                raw_date = str(item.get("date", ""))[:10]
+                try:
+                    parsed_date = date.fromisoformat(raw_date)
+                except ValueError:
+                    parsed_date = datetime.now(UTC).date()
 
                 df_import.append(
                     {
                         "Importar": default_inv_select,
-                        "Data": item["date"],
+                        "Data": parsed_date,
                         "Descrição": item["description"],
                         "Valor": float(item["amount"]),
                         "Categoria": item.get("category_suggestion") or "Outros",
                         "Parcela": inst_text,
+                        "Fatura Futura?": is_fut,
+                        "_raw_item": item,
                     }
                 )
 
-            edited_df = st.data_editor(
-                pd.DataFrame(df_import),
-                width="stretch",
-                hide_index=True,
-                column_config={
-                    "Importar": st.column_config.CheckboxColumn(
-                        "Importar?", default=default_inv_select
-                    ),
-                    "Data": st.column_config.DateColumn("Data"),
-                    "Descrição": st.column_config.TextColumn("Descrição"),
-                    "Categoria": st.column_config.TextColumn("Categoria"),
-                    "Parcela": st.column_config.TextColumn("Parcela"),
-                    "Valor": st.column_config.NumberColumn(
-                        "Valor (R$)", format="R$ %.2f"
-                    ),
-                },
-                key="editor_invoice_items",
-            )
+            if not df_import:
+                st.info("Nenhuma despesa para exibir com os filtros atuais.")
+            else:
+                display_df = pd.DataFrame(
+                    [
+                        {k: v for k, v in row.items() if k != "_raw_item"}
+                        for row in df_import
+                    ]
+                )
+                edited_df = st.data_editor(
+                    display_df,
+                    width="stretch",
+                    hide_index=True,
+                    column_config={
+                        "Importar": st.column_config.CheckboxColumn(
+                            "Importar?", default=default_inv_select
+                        ),
+                        "Data": st.column_config.DateColumn(
+                            "Data", format="DD/MM/YYYY"
+                        ),
+                        "Descrição": st.column_config.TextColumn("Descrição"),
+                        "Categoria": st.column_config.TextColumn("Categoria"),
+                        "Parcela": st.column_config.TextColumn("Parcela"),
+                        "Valor": st.column_config.NumberColumn(
+                            "Valor (R$)", format="R$ %.2f"
+                        ),
+                        "Fatura Futura?": st.column_config.CheckboxColumn(
+                            "Fatura Futura?",
+                            help="Se marcado, será gravado com status 'pendente' sem descontar o saldo imediatamente.",
+                        ),
+                    },
+                    key="editor_invoice_items",
+                )
 
-            if st.button("🚀 Confirmar e Lançar Despesas Selecionadas", type="primary"):
-                selected_rows = edited_df[edited_df["Importar"] == True]
-                if selected_rows.empty:
-                    st.warning("Nenhum lançamento selecionado para importação.")
-                else:
-                    success_count = 0
-                    errors = []
+                if st.button(
+                    "🚀 Confirmar e Lançar Despesas Selecionadas", type="primary"
+                ):
+                    selected_indices = edited_df[
+                        edited_df["Importar"] == True
+                    ].index.tolist()
+                    if not selected_indices:
+                        st.warning("Nenhum lançamento selecionado para importação.")
+                    else:
+                        success_count = 0
+                        projected_count = 0
+                        errors = []
 
-                    with st.spinner(f"Importando {len(selected_rows)} despesas..."):
-                        for _, row in selected_rows.iterrows():
-                            # Resolver ID da categoria se existir
-                            cat_id = None
-                            matched_cat = next(
-                                (
-                                    c
-                                    for c in categories
-                                    if c["name"].lower()
-                                    == str(row["Categoria"]).lower()
-                                ),
-                                None,
-                            )
-                            if matched_cat:
-                                cat_id = UUID(matched_cat["id"])
-
-                            val_str = f"{row['Valor']:.2f}"
-                            res = UIService.record_transaction(
-                                amount=val_str,
-                                transaction_type=TransactionType.EXPENSE,
-                                source_account_id=UUID(chosen_account["id"]),
-                                category_id=cat_id,
-                                description=str(row["Descrição"]),
-                                transaction_date=f"{row['Data']}T12:00:00Z",
-                                total_installments=1,
-                            )
-                            if "error" in res:
-                                errors.append(
-                                    f"{row['Descrição']}: {res['error']['message']}"
+                        with st.spinner(
+                            f"Importando {len(selected_indices)} despesas..."
+                        ):
+                            for idx in selected_indices:
+                                row = edited_df.iloc[idx]
+                                orig_item = df_import[idx]["_raw_item"]
+                                # Resolver ID da categoria se existir
+                                cat_id = None
+                                matched_cat = next(
+                                    (
+                                        c
+                                        for c in categories
+                                        if c["name"].lower()
+                                        == str(row["Categoria"]).lower()
+                                    ),
+                                    None,
                                 )
-                            else:
-                                success_count += 1
+                                if matched_cat:
+                                    cat_id = UUID(matched_cat["id"])
 
-                    if errors:
-                        st.error("Alguns erros ocorreram:\n" + "\n".join(errors))
-                    if success_count > 0:
-                        st.success(
-                            f"{success_count} despesas foram importadas com sucesso na conta {chosen_account['name']}!"
-                        )
-                        # Limpa estado da fatura
-                        st.session_state["invoice_items"] = []
-                        st.session_state["chat_history"] = []
-                        st.session_state["last_processed_file"] = None
-                        st.session_state[invoice_select_key] = True
-                        st.rerun()
+                                val_str = f"{row['Valor']:.2f}"
+                                row_date_str = (
+                                    row["Data"].isoformat()
+                                    if hasattr(row["Data"], "isoformat")
+                                    else str(row["Data"])[:10]
+                                )
+                                is_future_tx = bool(row["Fatura Futura?"])
+                                status_to_save = (
+                                    TransactionStatus.PENDING
+                                    if is_future_tx
+                                    else TransactionStatus.CLEARED
+                                )
+
+                                cur_inst = orig_item.get("installment_current")
+                                tot_inst = orig_item.get("installment_total")
+
+                                # Verificar se a coluna Parcela foi editada pelo usuário (ex: '2/4')
+                                parcela_str = str(row.get("Parcela", "")).strip()
+                                if parcela_str and parcela_str.lower() != "à vista":
+                                    p_cur, p_tot = extract_installment_from_description(
+                                        parcela_str
+                                    )
+                                    if p_cur and p_tot:
+                                        cur_inst, tot_inst = p_cur, p_tot
+
+                                if not cur_inst or not tot_inst:
+                                    d_cur, d_tot = extract_installment_from_description(
+                                        str(row["Descrição"])
+                                    )
+                                    if d_cur and d_tot:
+                                        cur_inst, tot_inst = d_cur, d_tot
+
+                                res = UIService.record_transaction(
+                                    amount=val_str,
+                                    transaction_type=TransactionType.EXPENSE,
+                                    source_account_id=UUID(chosen_account["id"]),
+                                    category_id=cat_id,
+                                    description=str(row["Descrição"]),
+                                    transaction_date=f"{row_date_str}T12:00:00Z",
+                                    status=status_to_save.value,
+                                    total_installments=tot_inst,
+                                    installment_number=cur_inst,
+                                )
+                                if "error" in res:
+                                    errors.append(
+                                        f"{row['Descrição']}: {res['error']['message']}"
+                                    )
+                                else:
+                                    success_count += 1
+
+                                # Projetar parcelas futuras restantes caso solicitado
+                                if (
+                                    project_future_installments
+                                    and cur_inst
+                                    and tot_inst
+                                    and cur_inst < tot_inst
+                                ):
+                                    from contas.utils.installments import add_months
+
+                                    base_dt = datetime.fromisoformat(
+                                        f"{row_date_str}T12:00:00+00:00"
+                                    )
+                                    for next_inst in range(cur_inst + 1, tot_inst + 1):
+                                        offset = next_inst - cur_inst
+                                        future_dt = add_months(base_dt, offset)
+                                        future_date_str = future_dt.strftime(
+                                            "%Y-%m-%dT12:00:00Z"
+                                        )
+                                        sub_res = UIService.record_transaction(
+                                            amount=val_str,
+                                            transaction_type=TransactionType.EXPENSE,
+                                            source_account_id=UUID(
+                                                chosen_account["id"]
+                                            ),
+                                            category_id=cat_id,
+                                            description=str(row["Descrição"]),
+                                            transaction_date=future_date_str,
+                                            status=TransactionStatus.PENDING.value,
+                                            total_installments=tot_inst,
+                                            installment_number=next_inst,
+                                        )
+                                        if "error" not in sub_res:
+                                            projected_count += 1
+
+                        if errors:
+                            st.error("Alguns erros ocorreram:\n" + "\n".join(errors))
+                        if success_count > 0:
+                            msg = f"{success_count} despesas foram importadas com sucesso na conta {chosen_account['name']}!"
+                            if projected_count > 0:
+                                msg += f" ({projected_count} parcelas futuras restantes foram projetadas como pendentes)"
+                            st.success(msg)
+                            # Limpa estado da fatura
+                            st.session_state["invoice_items"] = []
+                            st.session_state["chat_history"] = []
+                            st.session_state["last_processed_file"] = None
+                            st.session_state[invoice_select_key] = True
+                            st.rerun()
         else:
             st.info("Envie um arquivo PDF de fatura acima para iniciar.")
 
