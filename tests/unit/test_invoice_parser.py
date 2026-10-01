@@ -144,6 +144,125 @@ def test_refine_items_with_chat_mock():
     assert "Posto Ipiranga" in reply
 
 
+def test_refine_items_with_chat_selection_toggle():
+    mock_client = MagicMock()
+    mock_parsed = ChatRefinementContainer(
+        assistant_reply="Desmarquei as despesas de transporte da importação.",
+        updated_items=[
+            ExtractedInvoiceItem(
+                date="2026-09-02",
+                description="Uber *Trip",
+                amount="35.50",
+                category_suggestion="Transporte",
+                selected_for_import=False,
+            ),
+            ExtractedInvoiceItem(
+                date="2026-09-05",
+                description="Supermercado Pão de Açúcar",
+                amount="120.00",
+                category_suggestion="Alimentação",
+                selected_for_import=True,
+            ),
+        ],
+    )
+
+    mock_choice = MagicMock()
+    mock_choice.message.parsed = mock_parsed
+    mock_client.beta.chat.completions.parse.return_value = MagicMock(
+        choices=[mock_choice]
+    )
+
+    current_items = [
+        {
+            "date": "2026-09-02",
+            "description": "Uber *Trip",
+            "amount": "35.50",
+            "category_suggestion": "Transporte",
+            "selected_for_import": True,
+        },
+        {
+            "date": "2026-09-05",
+            "description": "Supermercado Pão de Açúcar",
+            "amount": "120.00",
+            "category_suggestion": "Alimentação",
+            "selected_for_import": True,
+        },
+    ]
+
+    updated, reply = refine_items_with_chat(
+        current_items=current_items,
+        user_message="desmarque os gastos com Uber",
+        categories=["Transporte", "Alimentação"],
+        client=mock_client,
+    )
+
+    assert len(updated) == 2
+    assert updated[0]["description"] == "Uber *Trip"
+    assert updated[0]["selected_for_import"] is False
+    assert updated[1]["description"] == "Supermercado Pão de Açúcar"
+    assert updated[1]["selected_for_import"] is True
+    assert "transporte" in reply.lower()
+
+
+def test_refine_items_with_chat_undo_filters():
+    mock_client = MagicMock()
+    original_items = [
+        {
+            "date": "2026-09-02",
+            "description": "Posto Ipiranga",
+            "amount": "150.00",
+            "category_suggestion": "Transporte",
+            "installment_current": None,
+            "installment_total": None,
+            "is_future": False,
+            "selected_for_import": True,
+        },
+        {
+            "date": "2026-09-05",
+            "description": "Amazon",
+            "amount": "89.90",
+            "category_suggestion": "Outros",
+            "installment_current": 2,
+            "installment_total": 5,
+            "is_future": False,
+            "selected_for_import": True,
+        },
+    ]
+
+    mock_parsed = ChatRefinementContainer(
+        assistant_reply="Filtros desfeitos! Restaurei todos os lançamentos originais da fatura.",
+        updated_items=[ExtractedInvoiceItem(**item) for item in original_items],
+    )
+
+    mock_choice = MagicMock()
+    mock_choice.message.parsed = mock_parsed
+    mock_client.beta.chat.completions.parse.return_value = MagicMock(
+        choices=[mock_choice]
+    )
+
+    # Currently only Amazon is in current_items (user had filtered out Posto)
+    current_items = [original_items[1]]
+
+    updated, reply = refine_items_with_chat(
+        current_items=current_items,
+        user_message="desfaça os filtros e volte tudo",
+        categories=["Transporte", "Outros"],
+        original_items=original_items,
+        client=mock_client,
+    )
+
+    assert len(updated) == 2
+    assert updated[0]["description"] == "Posto Ipiranga"
+    assert updated[1]["description"] == "Amazon"
+    assert "desfeitos" in reply.lower()
+
+    # Verify original_items were sent in prompt
+    call_args = mock_client.beta.chat.completions.parse.call_args
+    user_prompt = call_args[1]["messages"][1]["content"]
+    assert "Itens originais extraídos da fatura" in user_prompt
+    assert "Posto Ipiranga" in user_prompt
+
+
 def test_check_pdf_encrypted_mock():
     from unittest.mock import patch
 

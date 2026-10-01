@@ -75,6 +75,10 @@ class ExtractedInvoiceItem(BaseModel):
         default=False,
         description="True if this transaction belongs to future invoices, upcoming releases, or scheduled for future periods.",
     )
+    selected_for_import: bool = Field(
+        default=True,
+        description="Whether this transaction is selected for import into the system. Can be set to True or False by user chat commands (e.g. 'selecione apenas compras de mercado', 'desmarque os gastos com Uber', 'marque todas').",
+    )
 
     @model_validator(mode="after")
     def populate_installments_from_description(self) -> "ExtractedInvoiceItem":
@@ -190,9 +194,13 @@ def refine_items_with_chat(
     current_items: list[dict[str, Any]],
     user_message: str,
     categories: list[str],
+    original_items: list[dict[str, Any]] | None = None,
     client: OpenAI | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
-    """Refine, filter, or update items based on user natural language instructions."""
+    """Refine, filter, or update items based on user natural language instructions.
+
+    Supports undoing filters/resetting to the original extracted items if requested.
+    """
     if client is None:
         api_key = settings.effective_openai_api_key
         if not api_key:
@@ -206,15 +214,25 @@ def refine_items_with_chat(
     )
 
     system_prompt = (
-        "Você é um assistente financeiro inteligente que ajuda o usuário a filtrar, alterar categorias ou remover despesas de uma fatura de cartão.\n"
-        "O usuário enviará uma instrução em linguagem natural (ex: 'remova farmácia', 'filtre compras acima de R$ 50', 'mude Padaria para Alimentação').\n"
-        "Você deve aplicar as alterações na lista de transações e responder com:\n"
-        "1. assistant_reply: resposta amigável e concisa em Português confirmando o que foi filtrado ou alterado.\n"
-        "2. updated_items: a lista atualizada de itens com as alterações aplicadas.\n"
+        "Você é um assistente financeiro inteligente que ajuda o usuário a filtrar, alterar categorias, remover, marcar/desmarcar despesas para importação de uma fatura de cartão, ou desfazer/resetar filtros anteriores.\n"
+        "O usuário enviará uma instrução em linguagem natural (ex: 'remova farmácia', 'filtre compras acima de R$ 50', 'mude Padaria para Alimentação', 'marque apenas compras de alimentação para importar', 'desmarque gastos com Uber', 'selecione tudo', 'desfaça os filtros', 'volte os itens que foram removidos', 'restaure a lista original').\n"
+        "Regras:\n"
+        "1. Para comandos de desfazimento/restauração de filtros ou itens removidos (ex: 'desfaça os filtros', 'restaure todos os itens', 'volte os itens removidos', 'cancelar filtros', 'desfaça a última remoção'): utilize a lista de 'Itens originais extraídos da fatura' para restaurar os itens que haviam sido removidos ou filtrados.\n"
+        "2. Para comandos de marcar/desmarcar/selecionar para importar (ex: 'marque para importar X', 'não importe Y', 'selecione apenas Z', 'selecione tudo', 'desmarque tudo'): ajuste o campo 'selected_for_import' para True (marcada para importar) ou False (desmarcada da importação).\n"
+        "3. Para comandos explícitos de remoção/exclusão da lista (ex: 'remova as compras do iFood'): você pode remover os itens da lista ou deixá-los com selected_for_import=False.\n"
+        "4. Para alterações de categorias ou valores, atualize os respectivos campos.\n"
+        "5. Responda com:\n"
+        "   - assistant_reply: resposta amigável e concisa em Português confirmando o que foi restaurado, marcado, desmarcado, filtrado ou alterado.\n"
+        "   - updated_items: a lista atualizada de itens com as alterações aplicadas.\n"
         f"Categorias disponíveis: [{categories_list_str}].\n"
     )
 
     items_json = json.dumps(current_items, ensure_ascii=False)
+    user_prompt_content = f"Itens atuais:\n{items_json}\n"
+    if original_items:
+        orig_json = json.dumps(original_items, ensure_ascii=False)
+        user_prompt_content += f"\nItens originais extraídos da fatura (referência para desfazer/restaurar):\n{orig_json}\n"
+    user_prompt_content += f"\nInstrução do usuário:\n{user_message}"
 
     completion = client.beta.chat.completions.parse(
         model="gpt-4o-mini",
@@ -222,7 +240,7 @@ def refine_items_with_chat(
             {"role": "system", "content": system_prompt},
             {
                 "role": "user",
-                "content": f"Itens atuais:\n{items_json}\n\nInstrução do usuário:\n{user_message}",
+                "content": user_prompt_content,
             },
         ],
         response_format=ChatRefinementContainer,
