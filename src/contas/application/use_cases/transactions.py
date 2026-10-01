@@ -61,6 +61,14 @@ class RecordTransactionUseCase:
         parsed_date = datetime.now(UTC)
         if payload.transaction_date:
             parsed_date = datetime.fromisoformat(payload.transaction_date)
+            if parsed_date.tzinfo is None:
+                parsed_date = parsed_date.replace(tzinfo=UTC)
+
+        parsed_due_date = parsed_date
+        if payload.due_date:
+            parsed_due_date = datetime.fromisoformat(payload.due_date)
+            if parsed_due_date.tzinfo is None:
+                parsed_due_date = parsed_due_date.replace(tzinfo=UTC)
 
         is_installment = (
             payload.total_installments is not None and payload.total_installments > 1
@@ -134,6 +142,7 @@ class RecordTransactionUseCase:
             transaction_type=TransactionType(payload.transaction_type),
             status=TransactionStatus(payload.status),
             transaction_date=parsed_date,
+            due_date=parsed_due_date,
             description=payload.description,
             source_account_id=payload.source_account_id,
             destination_account_id=payload.destination_account_id,
@@ -149,12 +158,14 @@ class RecordTransactionUseCase:
             sub_txs = []
             for idx, inst_amount in enumerate(installment_amounts[1:], start=2):
                 inst_date = add_months(parsed_date, idx - 1)
+                inst_due_date = add_months(parsed_due_date, idx - 1)
                 sub_txs.append(
                     Transaction(
                         amount=inst_amount,
                         transaction_type=TransactionType(payload.transaction_type),
                         status=TransactionStatus.PENDING,
                         transaction_date=inst_date,
+                        due_date=inst_due_date,
                         description=payload.description,
                         source_account_id=payload.source_account_id,
                         destination_account_id=payload.destination_account_id,
@@ -172,6 +183,7 @@ class RecordTransactionUseCase:
             transaction_type=created_tx.transaction_type,
             status=created_tx.status,
             transaction_date=created_tx.transaction_date,
+            due_date=created_tx.due_date,
             description=created_tx.description,
             source_account=SourceAccountSummary(
                 id=source_account.id,
@@ -201,7 +213,11 @@ class GetStatementUseCase:
 
     async def execute(self, payload: GetStatementInput) -> dict[str, Any]:
         s_date = datetime.fromisoformat(payload.start_date)
+        if s_date.tzinfo is None:
+            s_date = s_date.replace(tzinfo=UTC)
         e_date = datetime.fromisoformat(payload.end_date)
+        if e_date.tzinfo is None:
+            e_date = e_date.replace(tzinfo=UTC)
 
         account = await self.account_repo.get_by_id(
             payload.account_id, only_active=False
@@ -213,6 +229,7 @@ class GetStatementUseCase:
             account_id=payload.account_id,
             start_date=s_date,
             end_date=e_date,
+            date_type=payload.date_type,
             limit=payload.limit,
         )
         if not payload.include_pending:
@@ -245,6 +262,7 @@ class GetStatementUseCase:
                 StatementItem(
                     id=tx.id,
                     transaction_date=tx.transaction_date,
+                    due_date=tx.due_date or tx.transaction_date,
                     description=tx.description,
                     amount=f"{tx.amount:.2f}",
                     transaction_type=tx.transaction_type,
@@ -267,6 +285,7 @@ class GetStatementUseCase:
             period=StatementPeriod(
                 start=payload.start_date,
                 end=payload.end_date,
+                date_type=payload.date_type,
             ),
             transactions=items,
             summary=StatementSummary(

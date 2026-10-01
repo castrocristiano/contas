@@ -51,6 +51,11 @@ class Transaction(SQLModel, table=True):
         default_factory=lambda: datetime.now(UTC),
         nullable=False,
     )
+    due_date: datetime | None = Field(
+        default=None,
+        nullable=True,
+        index=True,
+    )
     description: str = Field(default="", max_length=255, nullable=False)
     created_at: datetime = Field(
         default_factory=lambda: datetime.now(UTC),

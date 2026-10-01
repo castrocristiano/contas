@@ -19,6 +19,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
             transaction_type=TransactionType(orm.transaction_type),
             status=TransactionStatus(orm.status),
             transaction_date=orm.transaction_date,
+            due_date=orm.due_date,
             description=orm.description,
             source_account_id=orm.source_account_id,
             destination_account_id=orm.destination_account_id,
@@ -46,6 +47,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
                 transaction_type=transaction.transaction_type,
                 status=transaction.status,
                 transaction_date=transaction.transaction_date,
+                due_date=transaction.due_date,
                 description=transaction.description,
                 source_account_id=transaction.source_account_id,
                 destination_account_id=transaction.destination_account_id,
@@ -73,6 +75,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
                     transaction_type=tx.transaction_type,
                     status=tx.status,
                     transaction_date=tx.transaction_date,
+                    due_date=tx.due_date,
                     description=tx.description,
                     source_account_id=tx.source_account_id,
                     destination_account_id=tx.destination_account_id,
@@ -124,6 +127,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
         account_id: UUID,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        date_type: str = "transaction_date",
         limit: int = 50,
         offset: int = 0,
     ) -> list[DomainTransaction]:
@@ -131,15 +135,16 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
             query = select(ORMTransaction).where(
                 ORMTransaction.source_account_id == account_id
             )
-            if start_date:
-                query = query.where(ORMTransaction.transaction_date >= start_date)
-            if end_date:
-                query = query.where(ORMTransaction.transaction_date <= end_date)
-            query = (
-                query.order_by(ORMTransaction.transaction_date.asc())
-                .offset(offset)
-                .limit(limit)
+            date_col = (
+                ORMTransaction.due_date
+                if date_type == "due_date"
+                else ORMTransaction.transaction_date
             )
+            if start_date:
+                query = query.where(date_col >= start_date)
+            if end_date:
+                query = query.where(date_col <= end_date)
+            query = query.order_by(date_col.asc()).offset(offset).limit(limit)
             results = (await session.exec(query)).all()
             return [self._to_domain(t) for t in results]
 
@@ -181,11 +186,13 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
         account_id: UUID,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
+        date_type: str = "transaction_date",
     ) -> dict[str, Decimal]:
         txs = await self.list_by_account(
             account_id=account_id,
             start_date=start_date,
             end_date=end_date,
+            date_type=date_type,
             limit=10000,
         )
         total_income = Decimal("0.00")

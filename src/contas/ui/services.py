@@ -112,6 +112,7 @@ class UIService:
         end_date: str,
         include_pending: bool = True,
         limit: int = 100,
+        date_type: str = "transaction_date",
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_statement"].fn
@@ -123,6 +124,7 @@ class UIService:
                     end_date=end_date,
                     include_pending=include_pending,
                     limit=limit,
+                    date_type=date_type,
                 )
             )
         )
@@ -136,6 +138,7 @@ class UIService:
         category_id: UUID | None = None,
         description: str = "",
         transaction_date: str | None = None,
+        due_date: str | None = None,
         status: str = "cleared",
         total_installments: int | None = None,
         installment_number: int | None = None,
@@ -153,6 +156,7 @@ class UIService:
                     category_id=category_id,
                     description=description,
                     transaction_date=transaction_date,
+                    due_date=due_date,
                     status=status,
                     total_installments=total_installments,
                     installment_number=installment_number,

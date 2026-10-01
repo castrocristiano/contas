@@ -116,6 +116,15 @@ _TOOLS: list[dict] = [
                         "type": "string",
                         "description": "Data final no formato YYYY-MM-DD. Se não informada, busca até o final do ano corrente ou futuro.",
                     },
+                    "date_type": {
+                        "type": "string",
+                        "enum": ["transaction_date", "due_date"],
+                        "description": (
+                            "Tipo de data para filtragem: 'transaction_date' (data do lançamento/compra) ou "
+                            "'due_date' (data de vencimento da fatura/conta). Padrão: 'transaction_date'. "
+                            "Use 'due_date' quando o usuário perguntar sobre o que vence no período."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
                         "description": "Número máximo de transações a retornar. Padrão 50.",
@@ -191,6 +200,10 @@ _TOOLS: list[dict] = [
                         "type": "string",
                         "description": "Data no formato YYYY-MM-DD. Padrão: hoje.",
                     },
+                    "due_date": {
+                        "type": "string",
+                        "description": "Data de vencimento no formato YYYY-MM-DD. Opcional — se omitida, assume a data do lançamento.",
+                    },
                     "total_installments": {
                         "type": "integer",
                         "description": (
@@ -223,21 +236,28 @@ _TOOLS: list[dict] = [
             "description": (
                 "Cria uma nova conta financeira para o usuário. "
                 "Use quando o usuário pedir para criar, adicionar ou cadastrar uma conta bancária, "
-                "carteira, poupança, investimento, etc."
+                "carteira, poupança, investimento, cartão de crédito, etc."
             ),
             "parameters": {
                 "type": "object",
                 "properties": {
                     "name": {
                         "type": "string",
-                        "description": "Nome da conta (ex: 'Nubank', 'Bradesco Corrente', 'Carteira').",
+                        "description": "Nome da conta (ex: 'Nubank', 'Bradesco Corrente', 'Carteira', 'Cartão XP').",
                     },
                     "account_type": {
                         "type": "string",
-                        "enum": ["checking", "savings", "investment", "cash"],
+                        "enum": [
+                            "checking",
+                            "savings",
+                            "investment",
+                            "cash",
+                            "credit_card",
+                        ],
                         "description": (
                             "Tipo da conta: 'checking' (corrente), 'savings' (poupança), "
-                            "'investment' (investimento), 'cash' (carteira/dinheiro físico)."
+                            "'investment' (investimento), 'cash' (carteira/dinheiro físico), "
+                            "'credit_card' (cartão de crédito)."
                         ),
                     },
                     "initial_balance": {
@@ -461,6 +481,7 @@ def _execute_read_tool(
             start_date=start_date,
             end_date=end_date,
             limit=args.get("limit", 50),
+            date_type=args.get("date_type", "transaction_date"),
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
@@ -531,6 +552,10 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         if len(tx_date) == 10:  # date-only (YYYY-MM-DD)
             tx_date = f"{tx_date}T12:00:00Z"
 
+        due_date = args.get("due_date")
+        if due_date and len(due_date) == 10:
+            due_date = f"{due_date}T12:00:00Z"
+
         # Handle installment arguments
         total_installments = args.get("total_installments")
         total_amount = args.get("total_amount")
@@ -553,6 +578,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             category_id=category_id,
             description=args.get("description", ""),
             transaction_date=tx_date,
+            due_date=due_date,
             total_installments=total_installments,
             total_amount=total_amount,
         )
@@ -703,6 +729,7 @@ def _build_action_summary(
             f"**{tx_type}** de **{amount_fmt}** — {args.get('description', '')} | "
             f"Conta: **{args.get('account_name', '?')}** | "
             f"Categoria: {args.get('category_name', '—')} | Data: {date}"
+            + (f" | Vencimento: {args.get('due_date')}" if args.get("due_date") else "")
         )
     if name == "create_account":
         type_labels = {
@@ -710,6 +737,7 @@ def _build_action_summary(
             "savings": "Poupança",
             "investment": "Investimento",
             "cash": "Carteira/Dinheiro",
+            "credit_card": "Cartão de Crédito",
         }
         acc_type_label = type_labels.get(
             args.get("account_type", "checking"), args.get("account_type", "?")
@@ -793,7 +821,10 @@ Diretrizes:
 - Responda sempre em Português do Brasil.
 - Seja conciso mas completo. Use markdown quando útil (listas, negrito, tabelas simples).
 - Para consultas de extrato e transações de uma conta, use a ferramenta `get_statement`. Se o usuário não especificar datas, use um período amplo (ou deixe sem datas) para capturar lançamentos passados, presentes ou futuros (como compras parceladas ou faturas com datas futuras).
+- Ao consultar extratos com `get_statement`, use `date_type="due_date"` quando o usuário perguntar sobre vencimentos, contas a pagar/vencer ou faturas em determinado período (ex: "o que vence este mês?", "contas com vencimento até sexta"). Use `date_type="transaction_date"` (padrão) para consultas pela data em que a transação ocorreu ou foi lançada.
 - Se o saldo de uma conta estiver diferente de zero, sempre consulte o extrato dela antes de afirmar que não há transações.
+- Contas de cartão de crédito devem ser criadas com `account_type="credit_card"`.
+- Ao registrar transações com `record_transaction`, diferencie a data da transação (`transaction_date`) da data de vencimento (`due_date`) caso o usuário informe ambas (ex: "comprei dia 05 com vencimento dia 20"). Se nenhuma data de vencimento for especificada, `due_date` assumirá a mesma data de `transaction_date`.
 - Para consultas de plano de parcelamento, use `get_installment_plan` informando o `installment_id`.
 - Para qualquer alteração ou exclusão de dados (`create_account`, `create_category`, `set_budget`, `record_transaction`, `delete_transaction`, `delete_account`), o sistema SEMPRE exigirá confirmação do usuário na interface antes de efetivar.
 - Ao registrar compras parceladas (`record_transaction`), se o usuário disser "em 10x", "em 10 vezes", "parcelado em 3x", etc., você DEVE preencher `total_installments`. Se o valor fornecido for o da parcela (ex: "10 vezes de 216.81"), preencha `amount="216.81"` e `total_amount="2168.10"`. Se o valor fornecido for o valor total (ex: "compra de 1000 em 10x"), preencha `total_amount="1000.00"` e `amount="100.00"`.

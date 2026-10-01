@@ -17,6 +17,7 @@ class AccountType(StrEnum):
     SAVINGS = "savings"
     INVESTMENT = "investment"
     CASH = "cash"
+    CREDIT_CARD = "credit_card"
 
 
 class Account(SQLModel, table=True):
