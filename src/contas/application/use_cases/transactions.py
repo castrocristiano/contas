@@ -397,7 +397,18 @@ class GetFinancialSummaryUseCase:
         self.account_repo = account_repo
 
     async def execute(self, payload: GetFinancialSummaryInput) -> dict[str, Any]:
-        ref_date = payload.reference_date or datetime.now(UTC).date().isoformat()
+        if payload.reference_date:
+            ref_date = payload.reference_date
+        elif payload.year and payload.month:
+            ref_date = f"{payload.year:04d}-{payload.month:02d}-01"
+        elif payload.year:
+            ref_date = f"{payload.year:04d}-01-01"
+        elif payload.month:
+            now = datetime.now(UTC).date()
+            ref_date = f"{now.year:04d}-{payload.month:02d}-01"
+        else:
+            ref_date = datetime.now(UTC).date().isoformat()
+
         accounts = await self.account_repo.list_all(only_active=True, limit=1000)
 
         total = sum((acc.balance for acc in accounts), Decimal("0.00"))

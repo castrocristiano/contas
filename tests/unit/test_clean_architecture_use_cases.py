@@ -263,3 +263,29 @@ async def test_record_transaction_expense_updates_balance_in_memory():
     assert res["source_account"]["new_balance"] == "380.00"
     updated_acc = await account_repo.get_by_id(acc.id)
     assert updated_acc.balance == Decimal("380.00")
+
+
+@pytest.mark.anyio
+async def test_get_financial_summary_use_case():
+    from contas.application.use_cases.transactions import GetFinancialSummaryUseCase
+    from contas.schemas.transaction import GetFinancialSummaryInput
+
+    account_repo = InMemoryAccountRepository()
+    acc = Account(
+        name="Conta Corrente",
+        account_type=AccountType.CHECKING,
+        balance=Decimal("1500.50"),
+    )
+    await account_repo.create(acc)
+
+    uc = GetFinancialSummaryUseCase(account_repo)
+
+    # With month and year
+    res = await uc.execute(GetFinancialSummaryInput(month=10, year=2026))
+    assert res["reference_date"] == "2026-10-01"
+    assert res["total_assets"] == "1500.50"
+    assert len(res["accounts"]) == 1
+
+    # With reference_date
+    res2 = await uc.execute(GetFinancialSummaryInput(reference_date="2026-05-15"))
+    assert res2["reference_date"] == "2026-05-15"
