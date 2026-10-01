@@ -185,6 +185,7 @@ def parse_invoice_with_openai(
         ],
         response_format=InvoiceExtractionContainer,
         store=settings.openai_store,
+        metadata={"app": "contas", "feature": "invoice_parser"},
     )
 
     return completion.choices[0].message.parsed
@@ -245,6 +246,7 @@ def refine_items_with_chat(
         ],
         response_format=ChatRefinementContainer,
         store=settings.openai_store,
+        metadata={"app": "contas", "feature": "invoice_refinement"},
     )
 
     parsed = completion.choices[0].message.parsed

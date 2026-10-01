@@ -217,6 +217,18 @@ class GetFinancialSummaryInput(BaseModel):
         default=None,
         description="Reference date for balance calculation. ISO 8601. Defaults to today.",
     )
+    month: int | None = Field(
+        default=None,
+        ge=1,
+        le=12,
+        description="Month of reference (1-12).",
+    )
+    year: int | None = Field(
+        default=None,
+        ge=1900,
+        le=2100,
+        description="Year of reference (e.g. 2026).",
+    )
 
 
 class FinancialSummaryAccountItem(BaseModel):

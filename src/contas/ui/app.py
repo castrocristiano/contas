@@ -16,6 +16,10 @@ from contas.services.financial_chat import (
 )
 from contas.ui.services import UIService
 
+logging.basicConfig(
+    level=logging.DEBUG if settings.debug else logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 # Configuração da Página
@@ -695,6 +699,9 @@ def main():
                         for row in df_import
                     ]
                 )
+                if not display_df.empty and "Data" in display_df.columns:
+                    display_df["Data"] = pd.to_datetime(display_df["Data"])
+
                 edited_df = st.data_editor(
                     display_df,
                     width="stretch",
@@ -754,11 +761,12 @@ def main():
                                     cat_id = UUID(matched_cat["id"])
 
                                 val_str = f"{row['Valor']:.2f}"
-                                row_date_str = (
-                                    row["Data"].isoformat()
-                                    if hasattr(row["Data"], "isoformat")
-                                    else str(row["Data"])[:10]
-                                )
+                                if hasattr(row["Data"], "strftime"):
+                                    row_date_str = row["Data"].strftime("%Y-%m-%d")
+                                elif hasattr(row["Data"], "isoformat"):
+                                    row_date_str = row["Data"].isoformat()[:10]
+                                else:
+                                    row_date_str = str(row["Data"])[:10]
                                 is_future_tx = bool(row["Fatura Futura?"])
                                 status_to_save = (
                                     TransactionStatus.PENDING

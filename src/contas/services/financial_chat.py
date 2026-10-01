@@ -862,8 +862,11 @@ def chat_with_financial_assistant(
 
     # Agentic loop: keep resolving tool_calls until plain text reply or max iterations
     for iteration in range(6):
-        logger.debug(
-            "Chat iteration %d: sending request to OpenAI (%s)", iteration + 1, model
+        logger.info(
+            "Chat iteration %d: sending request to OpenAI (%s, store=%s)",
+            iteration + 1,
+            model,
+            settings.openai_store,
         )
         response = client.chat.completions.create(
             model=model,
@@ -871,6 +874,7 @@ def chat_with_financial_assistant(
             tools=_TOOLS,
             tool_choice="auto",
             store=settings.openai_store,
+            metadata={"app": "contas", "feature": "financial_chat"},
         )
 
         msg = response.choices[0].message

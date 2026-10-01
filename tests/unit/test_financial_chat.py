@@ -372,6 +372,30 @@ def test_execute_read_tool_get_installment_plan():
     assert data["total_installments"] == 10
 
 
+def test_execute_read_tool_get_financial_summary():
+    import json
+
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.get_financial_summary.return_value = {
+            "reference_date": "2026-10-01",
+            "accounts": [],
+            "total_assets": "1000.00",
+            "currency": "BRL",
+        }
+
+        res = _execute_read_tool(
+            "get_financial_summary",
+            {"month": 10, "year": 2026},
+            accounts=[],
+            categories=[],
+        )
+
+    mock_ui.get_financial_summary.assert_called_once_with(month=10, year=2026)
+    data = json.loads(res)
+    assert data["reference_date"] == "2026-10-01"
+    assert data["total_assets"] == "1000.00"
+
+
 def test_execute_pending_action_create_category():
     pending = PendingAction(
         tool_name="create_category",
