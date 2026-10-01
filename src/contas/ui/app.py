@@ -497,6 +497,8 @@ def main():
         # Inicializa estado da sessão para os itens extraídos e histórico do chat
         if "invoice_items" not in st.session_state:
             st.session_state["invoice_items"] = []
+        if "invoice_items_original" not in st.session_state:
+            st.session_state["invoice_items_original"] = []
         if "chat_history" not in st.session_state:
             st.session_state["chat_history"] = []
         if "last_processed_file" not in st.session_state:
@@ -535,11 +537,14 @@ def main():
                     )
                     items_dicts = [item.model_dump() for item in parsed_container.items]
                     st.session_state["invoice_items"] = items_dicts
+                    st.session_state["invoice_items_original"] = [
+                        dict(it) for it in items_dicts
+                    ]
                     st.session_state["last_processed_file"] = process_key
                     st.session_state["chat_history"] = [
                         {
                             "role": "assistant",
-                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), mudar categorias ou tirar dúvidas.",
+                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), marcar para importar, desfazer filtros (*'desfaça os filtros'*) ou tirar dúvidas.",
                         }
                     ]
                     st.success(
@@ -569,7 +574,7 @@ def main():
                     st.write(msg["content"])
 
             user_query = st.chat_input(
-                "Ex: Desconsidere gastos de farmácia, ou agrupe compras por categoria..."
+                "Ex: Desconsidere gastos de farmácia, desfaça os filtros, ou selecione apenas mercado..."
             )
             if user_query:
                 st.session_state["chat_history"].append(
@@ -581,11 +586,15 @@ def main():
                             current_items=st.session_state["invoice_items"],
                             user_message=user_query,
                             categories=category_names,
+                            original_items=st.session_state.get(
+                                "invoice_items_original", []
+                            ),
                         )
                         st.session_state["invoice_items"] = updated_items
                         st.session_state["chat_history"].append(
                             {"role": "assistant", "content": reply}
                         )
+                        st.session_state.pop("editor_invoice_items", None)
                         st.rerun()
                     except Exception as exc:  # noqa: BLE001
                         st.error(f"Erro no chat: {exc}")
@@ -622,10 +631,16 @@ def main():
             with inv_col1:
                 if st.button("☑️ Selecionar Tudo", key="btn_invoice_select_all"):
                     st.session_state[invoice_select_key] = True
+                    for item in items:
+                        item["selected_for_import"] = True
+                    st.session_state.pop("editor_invoice_items", None)
                     st.rerun()
             with inv_col2:
                 if st.button("⬜ Desmarcar Tudo", key="btn_invoice_deselect_all"):
                     st.session_state[invoice_select_key] = False
+                    for item in items:
+                        item["selected_for_import"] = False
+                    st.session_state.pop("editor_invoice_items", None)
                     st.rerun()
 
             default_inv_select = st.session_state[invoice_select_key]
@@ -657,9 +672,10 @@ def main():
                 except ValueError:
                     parsed_date = datetime.now(UTC).date()
 
+                is_selected = bool(item.get("selected_for_import", default_inv_select))
                 df_import.append(
                     {
-                        "Importar": default_inv_select,
+                        "Importar": is_selected,
                         "Data": parsed_date,
                         "Descrição": item["description"],
                         "Valor": float(item["amount"]),
@@ -830,6 +846,7 @@ def main():
                             st.success(msg)
                             # Limpa estado da fatura
                             st.session_state["invoice_items"] = []
+                            st.session_state["invoice_items_original"] = []
                             st.session_state["chat_history"] = []
                             st.session_state["last_processed_file"] = None
                             st.session_state[invoice_select_key] = True
