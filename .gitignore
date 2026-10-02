@@ -47,7 +47,9 @@ postgres_data/
 *.swp
 *.swo
 
-# OS
-.DS_Store
-Thumbs.db
+# Deploy / Server Scripts
+deploy_remote.sh
+update_remote.sh
+scripts/deploy_*.sh
+*.local.sh
 

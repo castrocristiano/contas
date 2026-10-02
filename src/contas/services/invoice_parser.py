@@ -154,6 +154,7 @@ def preprocess_invoice_text(text: str) -> str:
         stripped = line.strip()
         m_col = two_col_tx_pattern.match(stripped)
         if m_col:
+            # Emit Col 1 as a separate, distinct line with clean separation
             processed_lines.append(m_col.group(1).strip())
             processed_lines.append(m_col.group(2).strip())
             continue
@@ -176,8 +177,7 @@ def preprocess_invoice_text(text: str) -> str:
 
         processed_lines.append(line)
 
-    result = "\n".join(processed_lines)
-    return result
+    return "\n".join(processed_lines)
 
 
 def check_pdf_encrypted(pdf_bytes: bytes) -> bool:
@@ -248,8 +248,10 @@ def parse_invoice_with_openai(
         f"11. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
     )
 
+    model_to_use = settings.invoice_model or "gpt-4o"
+
     completion = client.beta.chat.completions.parse(
-        model="gpt-4o-mini",
+        model=model_to_use,
         messages=[
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"Texto da fatura:\n\n{clean_text}"},
