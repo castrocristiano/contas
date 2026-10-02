@@ -128,6 +128,7 @@ def preprocess_invoice_text(text: str) -> str:
         return text
 
     lines = text.split("\n")
+    processed_lines: list[str] = []
 
     # 1. Regex to split joined two-column transaction lines:
     # Matches: DD/MM ... AMOUNT followed by DD/MM ...
@@ -149,21 +150,19 @@ def preprocess_invoice_text(text: str) -> str:
         r"^(.*?)([A-Za-zÀ-ÿ]+)(\d{2}/\d{2}(?:/\d{2,4})?\s+.*[-]?\d+[\.,]\d{2}.*)$"
     )
 
-    processed: list[str] = []
-
     for line in lines:
         stripped = line.strip()
         m_col = two_col_tx_pattern.match(stripped)
         if m_col:
-            # Emit Col 1 as a separate, distinct line with prefix or clean separation
-            processed.append(m_col.group(1).strip())
-            processed.append(m_col.group(2).strip())
+            # Emit Col 1 as a separate, distinct line with clean separation
+            processed_lines.append(m_col.group(1).strip())
+            processed_lines.append(m_col.group(2).strip())
             continue
 
         m_hdr = header_tx_pattern.match(stripped)
         if m_hdr:
-            processed.append(m_hdr.group(1).strip())
-            processed.append(m_hdr.group(2).strip())
+            processed_lines.append(m_hdr.group(1).strip())
+            processed_lines.append(m_hdr.group(2).strip())
             continue
 
         m_glue = glued_date_pattern.match(stripped)
@@ -171,14 +170,14 @@ def preprocess_invoice_text(text: str) -> str:
             prefix = (m_glue.group(1) + m_glue.group(2)).strip()
             suffix = m_glue.group(3).strip()
             if prefix:
-                processed.append(prefix)
+                processed_lines.append(prefix)
             if suffix:
-                processed.append(suffix)
+                processed_lines.append(suffix)
             continue
 
-        processed.append(line)
+        processed_lines.append(line)
 
-    return "\n".join(processed)
+    return "\n".join(processed_lines)
 
 
 def check_pdf_encrypted(pdf_bytes: bytes) -> bool:
