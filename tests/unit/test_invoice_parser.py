@@ -332,3 +332,48 @@ def test_extracted_invoice_item_auto_detects_installments():
     )
     assert item.installment_current == 2
     assert item.installment_total == 4
+
+
+def test_preprocess_invoice_text_two_columns():
+    from contas.services.invoice_parser import preprocess_invoice_text
+
+    raw_text = (
+        "10/01 LOJA ALFA 01/05 25,00 15/01 LOJA BETA 01/03 60,00\n"
+        "20/01 COMERCIO GAMA 10,00 25/01 SERVICO DELTA 100,00\n"
+        "28/01 AJUSTE ESTORNO - 0,01 30/01 FARMACIA ZETA 01/02 30,00\n"
+        "31/01 PAGAMENTO AVULSO 150,00"
+    )
+
+    processed = preprocess_invoice_text(raw_text)
+    lines = processed.split("\n")
+
+    assert "10/01 LOJA ALFA 01/05 25,00" in lines
+    assert "15/01 LOJA BETA 01/03 60,00" in lines
+    assert "20/01 COMERCIO GAMA 10,00" in lines
+    assert "25/01 SERVICO DELTA 100,00" in lines
+    assert "28/01 AJUSTE ESTORNO - 0,01" in lines
+    assert "30/01 FARMACIA ZETA 01/02 30,00" in lines
+    assert "31/01 PAGAMENTO AVULSO 150,00" in lines
+    assert len(lines) == 7
+
+
+def test_preprocess_invoice_text_header_with_transaction():
+    from contas.services.invoice_parser import preprocess_invoice_text
+
+    raw = "TITULAR EXEMPLO(final 0000) 15/01 MERCADO EXEMPLO 50,00"
+    processed = preprocess_invoice_text(raw)
+    lines = processed.split("\n")
+
+    assert lines[0] == "TITULAR EXEMPLO(final 0000)"
+    assert lines[1] == "15/01 MERCADO EXEMPLO 50,00"
+    assert len(lines) == 2
+
+
+def test_preprocess_invoice_text_empty_and_passthrough():
+    from contas.services.invoice_parser import preprocess_invoice_text
+
+    assert preprocess_invoice_text("") == ""
+    assert preprocess_invoice_text(None) is None
+
+    normal = "15/09/2026 Compra Normal R$ 50,00\nOutra Linha Informativa"
+    assert preprocess_invoice_text(normal) == normal

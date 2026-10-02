@@ -117,6 +117,69 @@ class ChatRefinementContainer(BaseModel):
     )
 
 
+def preprocess_invoice_text(text: str) -> str:
+    """Pre-process extracted raw invoice text to split concatenated columns and isolate transactions.
+
+    Handles layout quirks from Brazilian credit card invoices (e.g. Itaú, LuizaCred) where
+    two parallel transaction columns get joined on the same line, or cardholder headers
+    are merged with the first transaction of a column.
+    """
+    if not text:
+        return text
+
+    lines = text.split("\n")
+    processed_lines: list[str] = []
+
+    # 1. Regex to split joined two-column transaction lines:
+    # Matches: DD/MM ... AMOUNT followed by DD/MM ...
+    # Ex: '15/01 LOJA EXEMPLO A 25,00 16/01 LOJA EXEMPLO B 50,00'
+    two_col_tx_pattern = re.compile(
+        r"^(\d{2}/\d{2}(?:/\d{2,4})?.*?[-]?\d+[\.,]\d{2})\s+(\d{2}/\d{2}(?:/\d{2,4})?.*)$"
+    )
+
+    # 2. Regex to split cardholder/card number header concatenated with transaction on same line:
+    # Ex: 'NOME DO CLIENTE(final 0000) 10/01 FARMACIA EXEMPLO 30,00'
+    header_tx_pattern = re.compile(
+        r"^(.*?(?:final\s*\d+[^\d]*|\bCART[ÃA]O\b[^\d]*))\s+(\d{2}/\d{2}(?:/\d{2,4})?.*[-]?\d+[\.,]\d{2}.*)$",
+        re.IGNORECASE,
+    )
+
+    # 3. Regex to split words where a date is glued directly without spaces (common in wrapped table cells):
+    # Ex: '...texto12/09 LOJA EXEMPLO 01/03 45,00' -> '...texto' e '12/09 LOJA EXEMPLO 01/03 45,00'
+    glued_date_pattern = re.compile(
+        r"^(.*?)([A-Za-zÀ-ÿ]+)(\d{2}/\d{2}(?:/\d{2,4})?\s+.*[-]?\d+[\.,]\d{2}.*)$"
+    )
+
+    for line in lines:
+        stripped = line.strip()
+        m_col = two_col_tx_pattern.match(stripped)
+        if m_col:
+            processed_lines.append(m_col.group(1).strip())
+            processed_lines.append(m_col.group(2).strip())
+            continue
+
+        m_hdr = header_tx_pattern.match(stripped)
+        if m_hdr:
+            processed_lines.append(m_hdr.group(1).strip())
+            processed_lines.append(m_hdr.group(2).strip())
+            continue
+
+        m_glue = glued_date_pattern.match(stripped)
+        if m_glue and not stripped.startswith("http"):
+            prefix = (m_glue.group(1) + m_glue.group(2)).strip()
+            suffix = m_glue.group(3).strip()
+            if prefix:
+                processed_lines.append(prefix)
+            if suffix:
+                processed_lines.append(suffix)
+            continue
+
+        processed_lines.append(line)
+
+    result = "\n".join(processed_lines)
+    return result
+
+
 def check_pdf_encrypted(pdf_bytes: bytes) -> bool:
     """Check if the PDF is encrypted and requires a password."""
     reader = PdfReader(io.BytesIO(pdf_bytes))
@@ -140,7 +203,8 @@ def extract_text_from_pdf(pdf_bytes: bytes, password: str | None = None) -> str:
         text = page.extract_text()
         if text:
             pages_text.append(f"--- Página {idx + 1} ---\n{text}")
-    return "\n\n".join(pages_text)
+    raw_combined = "\n\n".join(pages_text)
+    return preprocess_invoice_text(raw_combined)
 
 
 def parse_invoice_with_openai(
@@ -151,6 +215,9 @@ def parse_invoice_with_openai(
     """Parse raw PDF invoice text into structured items using OpenAI Structured Outputs."""
     if not pdf_text.strip():
         return InvoiceExtractionContainer(items=[])
+
+    # Ensure pre-processing even if text came from an external caller
+    clean_text = preprocess_invoice_text(pdf_text)
 
     if client is None:
         api_key = settings.effective_openai_api_key
@@ -166,22 +233,25 @@ def parse_invoice_with_openai(
 
     system_prompt = (
         "Você é um assistente financeiro especialista em extrair dados de faturas de cartão de crédito brasileiras.\n"
-        "Analise o texto cru da fatura e extraia todas as despesas individuais, compras, tarifas, juros, IOF, multas e encargos cobrados na fatura atual ou previstos para próximas faturas.\n"
-        "Regras:\n"
-        "1. Extraia compras, despesas, tarifas de anuidade, juros, encargos financeiros, multas e IOF cobranças como despesas com valor positivo.\n"
-        "2. Ignore apenas linhas que representem pagamentos efetuados pelo cliente (ex: 'Pagamento recebido', 'Pagamento de fatura'), e linhas de totais/resumos.\n"
-        "3. Identifique transações de faturas futuras (seção 'Próximas faturas', 'Lançamentos futuros' ou datas futuras ao fechamento da fatura) e marque 'is_future=True'. Para transações da fatura atual, marque 'is_future=False'.\n"
-        "4. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, infira pelo cabeçalho/período da fatura.\n"
-        "5. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
-        "6. Se a linha indicar parcelas em qualquer formato (ex: '02/10', 'Parcela 3 de 5', 'D02/04', '02/04' no final do nome do estabelecimento ou na descrição), extraia obrigatoriamente installment_current e installment_total.\n"
-        f"7. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
+        "Analise o texto da fatura e extraia todas as despesas individuais, compras, tarifas, juros, IOF, multas e encargos cobrados na fatura atual ou previstos para próximas faturas.\n"
+        "Regras fundamentais:\n"
+        "1. Extraia compras, despesas, tarifas de anuidade, juros reais cobrados, encargos financeiros, multas e IOF efetivo como despesas com valor positivo.\n"
+        "2. ENCARGOS COBRADOS NESTA FATURA: na seção 'Encargos cobrados nesta fatura', extraia obrigatoriamente os itens cobrados (ex: 'Juros do rotativo', 'Juros de mora', 'Multa por atraso', 'IOF de financiamento'). A data desses encargos deve ser a data de emissão ou fechamento da fatura.\n"
+        "3. NUNCA EXTRAIA DADOS DE SIMULAÇÕES OU OPÇÕES DE PAGAMENTO: ignore completamente seções de 'Opções de parcelamento', 'Simulação Saque Cash', 'Simulação de Compras parceladas', 'Parcelas fixas', 'Pagamento mínimo' e quaisquer valores de IOF ou juros simulados contidos nessas tabelas explicativas.\n"
+        "4. DEDUPLICAÇÃO DE ENCARGOS: se a fatura contiver uma linha de resumo consolidado (ex: 'Encargos (financiamento + moratório)' ou 'Total de encargos') E TAMBÉM listar os encargos detalhados (ex: 'Juros do rotativo', 'Juros de mora', 'Multa por atraso', 'IOF de financiamento'), extraia APENAS os itens detalhados individualmente para não duplicar o valor.\n"
+        "5. Ignore linhas de pagamentos efetuados pelo cliente (ex: 'Pagamento recebido', 'Pagamento efetuado', 'Pagamento de fatura'), e linhas de totais gerais da fatura (ex: 'Total desta fatura', 'Lançamentos atuais', 'Total para próximas faturas').\n"
+        "6. Identifique transações de faturas futuras (seção 'Próximas faturas', 'Lançamentos futuros' ou parcelas com vencimento posterior ao fechamento) e marque 'is_future=True'. Para transações da fatura atual, marque 'is_future=False'.\n"
+        "7. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, deduza com base no período/emissão da fatura.\n"
+        "8. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
+        "9. Se a linha indicar parcelas em qualquer formato (ex: '02/10', 'Parcela 3 de 5', 'D02/04', '02/04' no final do nome do estabelecimento ou na descrição), extraia obrigatoriamente installment_current e installment_total.\n"
+        f"10. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
     )
 
     completion = client.beta.chat.completions.parse(
         model="gpt-4o-mini",
         messages=[
             {"role": "system", "content": system_prompt},
-            {"role": "user", "content": f"Texto da fatura:\n\n{pdf_text}"},
+            {"role": "user", "content": f"Texto da fatura:\n\n{clean_text}"},
         ],
         response_format=InvoiceExtractionContainer,
         store=settings.openai_store,
