@@ -19,8 +19,22 @@ jobs:
     name: SonarQube Scan & Quality Gate
     runs-on: ubuntu-latest
 
-    # Sobe o SonarQube Community Edition (gratuito) em container de serviço no runner
+    # Sobe o SonarQube Community Edition (gratuito) e Postgres para os testes
     services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_DB: contas
+          POSTGRES_USER: contas
+          POSTGRES_PASSWORD: contas
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 5
+
       sonarqube:
         image: sonarqube:10.5-community
         ports:
@@ -51,8 +65,15 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
+      - name: Run Database Migrations
+        env:
+          DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
+        run: uv run alembic upgrade head
+
       - name: Run Tests with XML Coverage
-        run: uv run pytest -v tests/unit --cov=src/contas --cov-report=xml:coverage.xml
+        env:
+          DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
+        run: uv run pytest -v --cov=src/contas --cov-report=xml:coverage.xml
 
       - name: Wait for SonarQube Server to be fully ready
         run: |
