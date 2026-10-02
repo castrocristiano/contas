@@ -50,6 +50,11 @@ postgres_data/
 # Deploy / Server Scripts
 deploy_remote.sh
 update_remote.sh
+sonar_remote.sh
 scripts/deploy_*.sh
 *.local.sh
+.sonar/
+.scannerwork/
+coverage.xml
+.sonar_remote_token
 
