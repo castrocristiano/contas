@@ -776,12 +776,20 @@ def main():
                     key="editor_invoice_items",
                 )
 
+                selected_df = edited_df[edited_df["Importar"] == True]
+                total_selected = (
+                    float(selected_df["Valor"].sum()) if not selected_df.empty else 0.0
+                )
+                count_selected = len(selected_df)
+
+                st.info(
+                    f"💰 **Total Selecionado para Importar:** {format_currency(total_selected)} ({count_selected} despesas selecionadas)"
+                )
+
                 if st.button(
                     "🚀 Confirmar e Lançar Despesas Selecionadas", type="primary"
                 ):
-                    selected_indices = edited_df[
-                        edited_df["Importar"] == True
-                    ].index.tolist()
+                    selected_indices = selected_df.index.tolist()
                     if not selected_indices:
                         st.warning("Nenhum lançamento selecionado para importação.")
                     else:
