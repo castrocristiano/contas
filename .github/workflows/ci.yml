@@ -146,11 +146,57 @@ jobs:
             PROJECT_VERSION="0.1.0"
           fi
 
-          TAG="v${PROJECT_VERSION}"
-          
-          # Se a tag já existir para esta versão, incrementa sufixo com base no run_number para evitar duplicidade
-          if git rev-parse "$TAG" >/dev/null 2>&1; then
-            TAG="v${PROJECT_VERSION}-${{ github.run_number }}"
+          # Analisa histórico de commits recentes desde a última tag (ou últimos 20 commits se não houver tag)
+          LAST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          if [ -n "$LAST_TAG" ]; then
+            COMMIT_LOGS=$(git log "${LAST_TAG}..HEAD" --oneline)
+          else
+            COMMIT_LOGS=$(git log -n 20 --oneline)
+          fi
+
+          # Critérios de Mudança Estrutural / Breaking Change:
+          # 1. Convenção Conventional Commits: 'feat!:', 'refactor!:', 'fix!:', 'BREAKING CHANGE', 'BREAKING-CHANGE'
+          # 2. Palavras-chave: '[major]', 'breaking:', 'mudança estrutural'
+          # 3. Label de PR ou mensagem de merge com breaking change
+          IS_MAJOR=false
+          if echo "$COMMIT_LOGS" | grep -Ei "(\b(feat|fix|refactor|perf|chore)\!:|BREAKING[ -]CHANGE|\[major\]|breaking)" >/dev/null; then
+            IS_MAJOR=true
+          fi
+
+          # Também checa se houve migração estrutural no banco de dados (novas migrações alembic com breaking)
+          if [ -n "$LAST_TAG" ]; then
+            DIFF_FILES=$(git diff --name-only "${LAST_TAG}..HEAD" || echo "")
+            if echo "$DIFF_FILES" | grep -E "alembic/versions/.*_breaking" >/dev/null; then
+              IS_MAJOR=true
+            fi
+          fi
+
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$PROJECT_VERSION"
+          MAJOR=${MAJOR:-0}
+          MINOR=${MINOR:-1}
+          PATCH=${PATCH:-0}
+
+          if [ "$IS_MAJOR" = true ]; then
+            echo "🚨 Mudança estrutural/Breaking change detectada! Incrementando versão MAJOR."
+            NEW_MAJOR=$((MAJOR + 1))
+            PROJECT_VERSION="${NEW_MAJOR}.0.0"
+            TAG="v${PROJECT_VERSION}"
+          else
+            TAG="v${PROJECT_VERSION}"
+            # Se a tag já existir para esta versão, incrementa com base no run_number
+            if git rev-parse "$TAG" >/dev/null 2>&1; then
+              TAG="v${PROJECT_VERSION}-${{ github.run_number }}"
+            fi
+          fi
+
+          # Se foi detectada major, atualiza também a versão no pyproject.toml e commita na main
+          if [ "$IS_MAJOR" = true ]; then
+            sed -i -E "s/^version = \".*\"/version = \"${PROJECT_VERSION}\"/" pyproject.toml
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git add pyproject.toml
+            git commit -m "chore(release): bump version to $PROJECT_VERSION [skip ci]" || true
+            git push origin main || true
           fi
 
           echo "Criando tag e release para: $TAG"
