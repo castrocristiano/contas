@@ -62,15 +62,22 @@ jobs:
           DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
         run: uv run alembic upgrade head
 
-      - name: Run Unit & Integration Tests
+      - name: Run Unit & Integration Tests with Coverage
         env:
           DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
-        run: uv run pytest -v
+        run: uv run pytest -v --cov=src/contas --cov-report=xml:coverage.xml
+
+      - name: Upload Coverage Report Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage.xml
+          retention-days: 1
 
   # Abre PR de branch de fase ou feature → develop (após build bem-sucedido)
   auto-pr-to-develop:
     name: Open PR to develop
-    needs: build-and-test
+    needs: [build-and-test]
     if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/phase/') || startsWith(github.ref, 'refs/heads/feature/'))
     runs-on: ubuntu-latest
     steps:
