@@ -1,21 +1,28 @@
-# Security Policy
+# Política de Segurança (Security Policy)
 
-## Supported Versions
+## Versões Suportadas
 
-Use this section to tell people about which versions of your project are
-currently being supported with security updates.
+Atualmente, apenas as versões mais recentes da branch principal recebem correções de segurança.
 
-| Version | Supported          |
-| ------- | ------------------ |
-| 5.1.x   | :white_check_mark: |
-| 5.0.x   | :x:                |
-| 4.0.x   | :white_check_mark: |
-| < 4.0   | :x:                |
+| Versão | Suportada          |
+| ------ | ------------------ |
+| >= 0.1 | :white_check_mark: |
+| < 0.1  | :x:                |
 
-## Reporting a Vulnerability
+## Como Reportar Vulnerabilidades
 
-Use this section to tell people how to report a vulnerability.
+A segurança das informações e a privacidade dos dados financeiros e credenciais (chaves de API) são prioridades absolutas neste projeto.
 
-Tell them where to go, how often they can expect to get an update on a
-reported vulnerability, what to expect if the vulnerability is accepted or
-declined, etc.
+Se você descobrir uma vulnerabilidade de segurança:
+
+1. **Não abra uma Issue pública.**
+2. Reporte através do recurso de [Avisos de Segurança Privados do GitHub (Private Vulnerability Reporting)](https://github.com/castrocristiano/contas/security/advisories/new) ou envie um e-mail diretamente para:
+   - **E-mail:** `cscastro87@gmail.com`
+3. Inclua detalhes que ajudem na reprodução do problema:
+   - Descrição da vulnerabilidade.
+   - Passos ou script para reproduzir.
+   - Potencial impacto observado.
+
+### Tempo de Resposta
+- Uma resposta inicial será fornecida em até **48 horas**.
+- Se a vulnerabilidade for confirmada, uma correção será desenvolvida e disponibilizada em uma nova release o mais breve possível.
