@@ -147,12 +147,16 @@ class GetStatementInput(BaseModel):
     limit: int = Field(
         default=50,
         ge=1,
-        le=500,
-        description="Maximum number of transactions to return. Default: 50.",
+        le=1000,
+        description="Maximum number of transactions to return. Default: 50. Max: 1000.",
     )
     date_type: str = Field(
         default="transaction_date",
         description="Field to filter by: 'transaction_date' (data do lançamento) or 'due_date' (data de vencimento). Defaults to 'transaction_date'.",
+    )
+    search: str | None = Field(
+        default=None,
+        description="Optional case-insensitive substring search in description (e.g., 'PICPAY', 'MERCADO').",
     )
 
     @model_validator(mode="after")

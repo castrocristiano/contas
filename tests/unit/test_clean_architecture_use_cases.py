@@ -155,12 +155,15 @@ class InMemoryTransactionRepository(ITransactionRepository):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
+        search: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Transaction]:
         res = [
             t for t in self.transactions.values() if t.source_account_id == account_id
         ]
+        if search:
+            res = [t for t in res if search.lower() in t.description.lower()]
         if start_date or end_date:
             filtered = []
             for t in res:

@@ -125,10 +125,17 @@ _TOOLS: list[dict] = [
                             "Use 'due_date' quando o usuário perguntar sobre o que vence no período."
                         ),
                     },
+                    "search": {
+                        "type": "string",
+                        "description": (
+                            "Termo ou palavra-chave para buscar na descrição da transação (ex: 'PICPAY', 'MERCADO', 'IFOOD', 'FARMACIA'). "
+                            "Use sempre que o usuário pedir para filtrar, listar ou totalizar compras de um estabelecimento ou serviço específico."
+                        ),
+                    },
                     "limit": {
                         "type": "integer",
-                        "description": "Número máximo de transações a retornar. Padrão 50.",
-                        "default": 50,
+                        "description": "Número máximo de transações a retornar. Padrão 500.",
+                        "default": 500,
                     },
                 },
                 "required": [],
@@ -480,8 +487,9 @@ def _execute_read_tool(
             account_id=UUID(account["id"]),
             start_date=start_date,
             end_date=end_date,
-            limit=args.get("limit", 50),
+            limit=args.get("limit", 500),
             date_type=args.get("date_type", "transaction_date"),
+            search=args.get("search"),
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
@@ -821,6 +829,7 @@ Diretrizes:
 - Responda sempre em Português do Brasil.
 - Seja conciso mas completo. Use markdown quando útil (listas, negrito, tabelas simples).
 - Para consultas de extrato e transações de uma conta, use a ferramenta `get_statement`. Se o usuário não especificar datas, use um período amplo (ou deixe sem datas) para capturar lançamentos passados, presentes ou futuros (como compras parceladas ou faturas com datas futuras).
+- Sempre que o usuário pedir para buscar, filtrar ou totalizar transações por nome, descrição ou estabelecimento (ex: "compras do PicPay", "gastos no Mercado", "Uber", etc.), passe o parâmetro `search` diretamente em `get_statement` (ex: `search="PICPAY"`). Isso garante que o banco filtre todas as correspondências sem sofrer corte de paginação.
 - Ao consultar extratos com `get_statement`, use `date_type="due_date"` quando o usuário perguntar sobre vencimentos, contas a pagar/vencer ou faturas em determinado período (ex: "o que vence este mês?", "contas com vencimento até sexta"). Use `date_type="transaction_date"` (padrão) para consultas pela data em que a transação ocorreu ou foi lançada.
 - Se o saldo de uma conta estiver diferente de zero, sempre consulte o extrato dela antes de afirmar que não há transações.
 - Contas de cartão de crédito devem ser criadas com `account_type="credit_card"`.

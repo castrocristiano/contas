@@ -218,8 +218,17 @@ def test_get_statement_input_limit_bounds():
             account_id=uuid4(),
             start_date="2026-09-01",
             end_date="2026-09-30",
-            limit=501,
+            limit=1001,
         )
+
+    # Valid with search
+    valid_search = GetStatementInput(
+        account_id=uuid4(),
+        start_date="2026-09-01",
+        end_date="2026-09-30",
+        search="PICPAY",
+    )
+    assert valid_search.search == "PICPAY"
 
 
 def test_get_financial_summary_input_default():

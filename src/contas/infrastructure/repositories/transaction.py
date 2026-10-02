@@ -128,6 +128,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
+        search: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DomainTransaction]:
@@ -144,6 +145,8 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
                 query = query.where(date_col >= start_date)
             if end_date:
                 query = query.where(date_col <= end_date)
+            if search:
+                query = query.where(ORMTransaction.description.ilike(f"%{search}%"))
             query = query.order_by(date_col.asc()).offset(offset).limit(limit)
             results = (await session.exec(query)).all()
             return [self._to_domain(t) for t in results]
