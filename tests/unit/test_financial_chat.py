@@ -689,3 +689,31 @@ def test_build_action_summary_due_date_and_credit_card():
         [],
     )
     assert "Cartão de Crédito" in s_acc
+
+
+def test_execute_read_tool_get_statement_with_search():
+    import json
+
+    accounts = [{"id": "00000000-0000-0000-0000-000000000001", "name": "Magalu"}]
+
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.get_statement.return_value = {
+            "account": {"name": "Magalu"},
+            "transactions": [
+                {"id": "tx1", "description": "PICPAY*Item", "amount": "49.90"}
+            ],
+        }
+
+        result = _execute_read_tool(
+            "get_statement",
+            {"account_name": "Magalu", "search": "PICPAY"},
+            accounts=accounts,
+            categories=[],
+        )
+
+    mock_ui.get_statement.assert_called_once()
+    call_kwargs = mock_ui.get_statement.call_args.kwargs
+    assert call_kwargs["search"] == "PICPAY"
+    assert call_kwargs["limit"] == 500
+    data = json.loads(result)
+    assert len(data["transactions"]) == 1

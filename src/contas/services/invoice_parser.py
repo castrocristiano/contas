@@ -98,6 +98,10 @@ class InvoiceExtractionContainer(BaseModel):
         default=None,
         description="Month or period of the invoice if identified (e.g., 'Setembro/2026').",
     )
+    invoice_due_date: str | None = Field(
+        default=None,
+        description="Due date of the invoice in ISO 8601 format (YYYY-MM-DD), found in the header or payment slip (e.g., '2026-09-20').",
+    )
     items: list[ExtractedInvoiceItem] = Field(
         default_factory=list,
         description="List of extracted transaction items.",
@@ -246,6 +250,7 @@ def parse_invoice_with_openai(
         "9. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
         "10. Se a linha indicar parcelas em qualquer formato (ex: '02/10', 'Parcela 3 de 5', 'D02/04', '02/04' no final do nome do estabelecimento ou na descrição), extraia obrigatoriamente installment_current e installment_total.\n"
         f"11. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
+        "12. Identifique também o 'invoice_due_date' (data de vencimento da fatura, formato 'YYYY-MM-DD') e 'invoice_period' encontrados no cabeçalho ou resumo da fatura.\n"
     )
 
     model_to_use = settings.invoice_model or "gpt-4o"

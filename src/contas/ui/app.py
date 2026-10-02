@@ -593,6 +593,9 @@ def main():
                     st.session_state["invoice_items_original"] = [
                         dict(it) for it in items_dicts
                     ]
+                    st.session_state["invoice_due_date"] = (
+                        parsed_container.invoice_due_date
+                    )
                     st.session_state["last_processed_file"] = process_key
                     st.session_state["chat_history"] = [
                         {
@@ -661,7 +664,25 @@ def main():
             )
 
             # Opções de importação e parcelas futuras
-            col_opt1, col_opt2 = st.columns([1, 1])
+            # Tentar sugerir a data de vencimento extraída da fatura
+            extracted_due = st.session_state.get("invoice_due_date")
+            initial_due_date = datetime.now(UTC).date()
+            if extracted_due:
+                try:
+                    initial_due_date = date.fromisoformat(str(extracted_due)[:10])
+                except (ValueError, TypeError):
+                    logger.debug(
+                        "Could not parse extracted invoice due date: %s", extracted_due
+                    )
+
+            col_due, col_opt1, col_opt2 = st.columns([1.5, 2, 2])
+            with col_due:
+                invoice_due_date_val = st.date_input(
+                    "📅 Vencimento da Fatura (Cartão)",
+                    value=initial_due_date,
+                    format="DD/MM/YYYY",
+                    help="Data em que esta fatura vence e deve ser paga.",
+                )
             with col_opt1:
                 include_future_txs = st.checkbox(
                     "📅 Listar lançamentos de faturas futuras",
@@ -696,6 +717,8 @@ def main():
                     st.session_state.pop("editor_invoice_items", None)
                     st.rerun()
 
+            from contas.utils.installments import add_months
+
             default_inv_select = st.session_state[invoice_select_key]
             df_import = []
             for idx, item in enumerate(items):
@@ -725,11 +748,24 @@ def main():
                 except ValueError:
                     parsed_date = datetime.now(UTC).date()
 
+                # Se for lançamento futuro de parcela ou próxima fatura, calcula o vencimento futuro
+                item_due_date = invoice_due_date_val
+                if is_fut:
+                    # Se tiver número de parcela futura, adiciona 1 mês
+                    base_due_dt = datetime(
+                        invoice_due_date_val.year,
+                        invoice_due_date_val.month,
+                        invoice_due_date_val.day,
+                        tzinfo=UTC,
+                    )
+                    item_due_date = add_months(base_due_dt, 1).date()
+
                 is_selected = bool(item.get("selected_for_import", default_inv_select))
                 df_import.append(
                     {
                         "Importar": is_selected,
-                        "Data": parsed_date,
+                        "Data Compra": parsed_date,
+                        "Vencimento": item_due_date,
                         "Descrição": item["description"],
                         "Valor": float(item["amount"]),
                         "Categoria": item.get("category_suggestion") or "Outros",
@@ -748,8 +784,15 @@ def main():
                         for row in df_import
                     ]
                 )
-                if not display_df.empty and "Data" in display_df.columns:
-                    display_df["Data"] = pd.to_datetime(display_df["Data"])
+                if not display_df.empty:
+                    if "Data Compra" in display_df.columns:
+                        display_df["Data Compra"] = pd.to_datetime(
+                            display_df["Data Compra"]
+                        )
+                    if "Vencimento" in display_df.columns:
+                        display_df["Vencimento"] = pd.to_datetime(
+                            display_df["Vencimento"]
+                        )
 
                 edited_df = st.data_editor(
                     display_df,
@@ -759,8 +802,11 @@ def main():
                         "Importar": st.column_config.CheckboxColumn(
                             "Importar?", default=default_inv_select
                         ),
-                        "Data": st.column_config.DateColumn(
-                            "Data", format="DD/MM/YYYY"
+                        "Data Compra": st.column_config.DateColumn(
+                            "Data da Compra", format="DD/MM/YYYY"
+                        ),
+                        "Vencimento": st.column_config.DateColumn(
+                            "Vencimento Fatura", format="DD/MM/YYYY"
                         ),
                         "Descrição": st.column_config.TextColumn("Descrição"),
                         "Categoria": st.column_config.TextColumn("Categoria"),
@@ -818,12 +864,22 @@ def main():
                                     cat_id = UUID(matched_cat["id"])
 
                                 val_str = f"{row['Valor']:.2f}"
-                                if hasattr(row["Data"], "strftime"):
-                                    row_date_str = row["Data"].strftime("%Y-%m-%d")
-                                elif hasattr(row["Data"], "isoformat"):
-                                    row_date_str = row["Data"].isoformat()[:10]
+                                dt_col = row["Data Compra"]
+                                if hasattr(dt_col, "strftime"):
+                                    row_date_str = dt_col.strftime("%Y-%m-%d")
+                                elif hasattr(dt_col, "isoformat"):
+                                    row_date_str = dt_col.isoformat()[:10]
                                 else:
-                                    row_date_str = str(row["Data"])[:10]
+                                    row_date_str = str(dt_col)[:10]
+
+                                due_col = row["Vencimento"]
+                                if hasattr(due_col, "strftime"):
+                                    row_due_str = due_col.strftime("%Y-%m-%d")
+                                elif hasattr(due_col, "isoformat"):
+                                    row_due_str = due_col.isoformat()[:10]
+                                else:
+                                    row_due_str = str(due_col)[:10]
+
                                 is_future_tx = bool(row["Fatura Futura?"])
                                 status_to_save = (
                                     TransactionStatus.PENDING
@@ -857,6 +913,7 @@ def main():
                                     category_id=cat_id,
                                     description=str(row["Descrição"]),
                                     transaction_date=f"{row_date_str}T12:00:00Z",
+                                    due_date=f"{row_due_str}T12:00:00Z",
                                     status=status_to_save.value,
                                     total_installments=tot_inst,
                                     installment_number=cur_inst,
@@ -875,17 +932,16 @@ def main():
                                     and tot_inst
                                     and cur_inst < tot_inst
                                 ):
-                                    from contas.utils.installments import add_months
-
-                                    base_dt = datetime.fromisoformat(
-                                        f"{row_date_str}T12:00:00+00:00"
+                                    base_due_dt = datetime.fromisoformat(
+                                        f"{row_due_str}T12:00:00+00:00"
                                     )
                                     for next_inst in range(cur_inst + 1, tot_inst + 1):
                                         offset = next_inst - cur_inst
-                                        future_dt = add_months(base_dt, offset)
-                                        future_date_str = future_dt.strftime(
+                                        future_due_dt = add_months(base_due_dt, offset)
+                                        future_due_str = future_due_dt.strftime(
                                             "%Y-%m-%dT12:00:00Z"
                                         )
+                                        # Data de compra mantém a original ou futura
                                         sub_res = UIService.record_transaction(
                                             amount=val_str,
                                             transaction_type=TransactionType.EXPENSE,
@@ -894,7 +950,8 @@ def main():
                                             ),
                                             category_id=cat_id,
                                             description=str(row["Descrição"]),
-                                            transaction_date=future_date_str,
+                                            transaction_date=f"{row_date_str}T12:00:00Z",
+                                            due_date=future_due_str,
                                             status=TransactionStatus.PENDING.value,
                                             total_installments=tot_inst,
                                             installment_number=next_inst,

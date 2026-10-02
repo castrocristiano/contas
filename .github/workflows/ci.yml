@@ -66,7 +66,6 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
         run: uv run pytest -v --cov=src/contas --cov-report=xml:coverage.xml
-
       - name: Upload Coverage Report Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -74,10 +73,90 @@ jobs:
           path: coverage.xml
           retention-days: 1
 
-  # Abre PR de branch de fase ou feature → develop (após build bem-sucedido)
+  # Job dedicado do SonarQube rodando em container no CI
+  sonarqube:
+    name: SonarQube Scan & Quality Gate
+    needs: [build-and-test]
+    runs-on: ubuntu-latest
+    services:
+      sonarqube:
+        image: sonarqube:10.5-community
+        ports:
+          - 9000:9000
+        env:
+          SONAR_ES_BOOTSTRAP_CHECKS_DISABLE: "true"
+        options: >-
+          --health-cmd "curl -s -f http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"
+          --health-interval 10s
+          --health-timeout 10s
+          --health-retries 30
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download Coverage Report Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: coverage-report
+
+      - name: Wait for SonarQube Server to be fully ready
+        run: |
+          echo "Aguardando inicialização completa do SonarQube..."
+          for i in {1..60}; do
+            STATUS=$(curl -s http://localhost:9000/api/system/status | grep -Po '"status":"\K[^"]*' || echo "DOWN")
+            if [ "$STATUS" = "UP" ]; then
+              echo "SonarQube está pronto!"
+              break
+            fi
+            echo "Aguardando SonarQube status UP (status atual: $STATUS)... ($i/60)"
+            sleep 5
+          done
+
+      - name: Authenticate and Generate SonarQube Project & Token
+        id: sonar-setup
+        run: |
+          # Altera a senha inicial padrão do admin (admin -> admin1234)
+          curl -s -u admin:admin -X POST "http://localhost:9000/api/users/change_password?login=admin&previousPassword=admin&password=admin1234" || true
+          
+          # Cria o projeto se ainda não existir
+          curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/projects/create?name=contas&project=contas" || true
+          
+          # Gera um token de análise
+          TOKEN_JSON=$(curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/user_tokens/generate?name=ci-token-$(date +%s)")
+          ANALYSIS_TOKEN=$(echo "$TOKEN_JSON" | grep -Po '"token":"\K[^"]*' || echo "")
+          
+          if [ -z "$ANALYSIS_TOKEN" ]; then
+            ANALYSIS_TOKEN="admin1234"
+          fi
+          
+          echo "token=$ANALYSIS_TOKEN" >> $GITHUB_OUTPUT
+
+      - name: SonarQube Community Container Scanner
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ steps.sonar-setup.outputs.token }}
+          SONAR_HOST_URL: "http://localhost:9000"
+        with:
+          args: >
+            -Dsonar.projectKey=contas
+            -Dsonar.sources=src
+            -Dsonar.tests=tests
+            -Dsonar.python.coverage.reportPaths=coverage.xml
+
+      - name: Validate SonarQube Quality Gate
+        uses: SonarSource/sonarqube-quality-gate-action@v1
+        timeout-minutes: 5
+        env:
+          SONAR_TOKEN: ${{ steps.sonar-setup.outputs.token }}
+          SONAR_HOST_URL: "http://localhost:9000"
+
+  # Abre PR de branch de fase ou feature → develop (após build bem-sucedido e aprovação no SonarQube)
   auto-pr-to-develop:
     name: Open PR to develop
-    needs: [build-and-test]
+    needs: [build-and-test, sonarqube]
     if: github.event_name == 'push' && (startsWith(github.ref, 'refs/heads/phase/') || startsWith(github.ref, 'refs/heads/feature/'))
     runs-on: ubuntu-latest
     steps:
@@ -103,10 +182,10 @@ jobs:
               --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
           fi
 
-  # Abre PR de develop → main (após build bem-sucedido)
+  # Abre PR de develop → main (após build e sonar bem-sucedidos)
   auto-pr-to-main:
     name: Open PR to main
-    needs: build-and-test
+    needs: [build-and-test, sonarqube]
     if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
     runs-on: ubuntu-latest
     steps:
@@ -131,10 +210,10 @@ jobs:
               --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
           fi
 
-  # Cria Release no GitHub quando código for mergeado na branch main (após build & test com sucesso)
+  # Cria Release no GitHub quando código for mergeado na branch main (após build & sonar com sucesso)
   release-on-main:
     name: Create GitHub Release
-    needs: build-and-test
+    needs: [build-and-test, sonarqube]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:

@@ -230,6 +230,7 @@ class GetStatementUseCase:
             start_date=s_date,
             end_date=e_date,
             date_type=payload.date_type,
+            search=payload.search,
             limit=payload.limit,
         )
         if not payload.include_pending:

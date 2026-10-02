@@ -67,6 +67,7 @@ class ITransactionRepository(Protocol):
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
+        search: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Transaction]: ...

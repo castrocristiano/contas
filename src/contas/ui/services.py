@@ -111,8 +111,9 @@ class UIService:
         start_date: str,
         end_date: str,
         include_pending: bool = True,
-        limit: int = 100,
+        limit: int = 500,
         date_type: str = "transaction_date",
+        search: str | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_statement"].fn
@@ -125,6 +126,7 @@ class UIService:
                     include_pending=include_pending,
                     limit=limit,
                     date_type=date_type,
+                    search=search,
                 )
             )
         )
