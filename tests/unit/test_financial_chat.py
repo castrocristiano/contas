@@ -693,14 +693,15 @@ def test_build_action_summary_due_date_and_credit_card():
 
 def test_execute_read_tool_get_statement_with_search():
     import json
-    from uuid import UUID
 
     accounts = [{"id": "00000000-0000-0000-0000-000000000001", "name": "Magalu"}]
 
     with patch("contas.services.financial_chat.UIService") as mock_ui:
         mock_ui.get_statement.return_value = {
             "account": {"name": "Magalu"},
-            "transactions": [{"id": "tx1", "description": "PICPAY*Item", "amount": "49.90"}],
+            "transactions": [
+                {"id": "tx1", "description": "PICPAY*Item", "amount": "49.90"}
+            ],
         }
 
         result = _execute_read_tool(

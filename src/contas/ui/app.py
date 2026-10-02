@@ -670,8 +670,10 @@ def main():
             if extracted_due:
                 try:
                     initial_due_date = date.fromisoformat(str(extracted_due)[:10])
-                except Exception:
-                    pass
+                except (ValueError, TypeError):
+                    logger.debug(
+                        "Could not parse extracted invoice due date: %s", extracted_due
+                    )
 
             col_due, col_opt1, col_opt2 = st.columns([1.5, 2, 2])
             with col_due:
