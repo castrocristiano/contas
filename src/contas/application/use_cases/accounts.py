@@ -26,11 +26,16 @@ class CreateAccountUseCase:
         self.account_repo = account_repo
 
     async def execute(self, payload: CreateAccountInput) -> dict[str, Any]:
+        # If user_id is not passed, use a default uuid or empty
+        account_user_id = payload.user_id or UUID(
+            "00000000-0000-0000-0000-000000000000"
+        )
         account = Account(
             name=payload.name,
             account_type=AccountType(payload.account_type),
             balance=Decimal(payload.initial_balance),
             currency=payload.currency,
+            user_id=account_user_id,
         )
         created = await self.account_repo.create(account)
         response = AccountResponse(
@@ -41,6 +46,7 @@ class CreateAccountUseCase:
             currency=created.currency,
             is_active=created.is_active,
             created_at=created.created_at,
+            user_id=created.user_id,
         )
         return response.model_dump(mode="json")
 
@@ -51,6 +57,7 @@ class ListAccountsUseCase:
 
     async def execute(self, payload: ListAccountsInput) -> dict[str, Any]:
         accounts = await self.account_repo.list_all(
+            user_id=payload.user_id,
             only_active=not payload.include_inactive,
             limit=1000,
         )
@@ -65,6 +72,7 @@ class ListAccountsUseCase:
                 balance=f"{acc.balance:.2f}",
                 currency=acc.currency,
                 is_active=acc.is_active,
+                user_id=acc.user_id,
             )
             for acc in accounts
         ]

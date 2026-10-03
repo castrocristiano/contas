@@ -6,6 +6,7 @@ from contas.application.ports.repositories import (
     IBudgetRepository,
     ICategoryRepository,
     ITransactionRepository,
+    IUserRepository,
 )
 from contas.application.use_cases.accounts import (
     BulkDeleteAccountsUseCase,
@@ -13,6 +14,13 @@ from contas.application.use_cases.accounts import (
     DeleteAccountUseCase,
     ListAccountsUseCase,
     UpdateAccountUseCase,
+)
+from contas.application.use_cases.auth import (
+    ApproveUserUseCase,
+    AuthenticateUserUseCase,
+    GoogleOAuthUseCase,
+    ListUsersUseCase,
+    RegisterUserUseCase,
 )
 from contas.application.use_cases.budgets import (
     GetBudgetStatusUseCase,
@@ -35,6 +43,7 @@ from contas.infrastructure.repositories.category import SQLAlchemyCategoryReposi
 from contas.infrastructure.repositories.transaction import (
     SQLAlchemyTransactionRepository,
 )
+from contas.infrastructure.repositories.user import SQLAlchemyUserRepository
 
 
 @dataclass
@@ -43,6 +52,14 @@ class Container:
     category_repo: ICategoryRepository
     transaction_repo: ITransactionRepository
     budget_repo: IBudgetRepository
+    user_repo: IUserRepository
+
+    # Auth Use Cases
+    register_user_uc: RegisterUserUseCase
+    authenticate_user_uc: AuthenticateUserUseCase
+    google_oauth_uc: GoogleOAuthUseCase
+    approve_user_uc: ApproveUserUseCase
+    list_users_uc: ListUsersUseCase
 
     # Use Cases
     create_account_uc: CreateAccountUseCase
@@ -70,12 +87,19 @@ def get_container() -> Container:
     category_repo = SQLAlchemyCategoryRepository()
     transaction_repo = SQLAlchemyTransactionRepository()
     budget_repo = SQLAlchemyBudgetRepository()
+    user_repo = SQLAlchemyUserRepository()
 
     return Container(
         account_repo=account_repo,
         category_repo=category_repo,
         transaction_repo=transaction_repo,
         budget_repo=budget_repo,
+        user_repo=user_repo,
+        register_user_uc=RegisterUserUseCase(user_repo),
+        authenticate_user_uc=AuthenticateUserUseCase(user_repo),
+        google_oauth_uc=GoogleOAuthUseCase(user_repo),
+        approve_user_uc=ApproveUserUseCase(user_repo),
+        list_users_uc=ListUsersUseCase(user_repo),
         create_account_uc=CreateAccountUseCase(account_repo),
         list_accounts_uc=ListAccountsUseCase(account_repo),
         update_account_uc=UpdateAccountUseCase(account_repo),

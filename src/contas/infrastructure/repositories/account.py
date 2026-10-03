@@ -15,6 +15,7 @@ class SQLAlchemyAccountRepository(IAccountRepository):
     def _to_domain(self, orm: ORMAccount) -> DomainAccount:
         return DomainAccount(
             id=orm.id,
+            user_id=orm.user_id,
             name=orm.name,
             account_type=AccountType(orm.account_type),
             balance=orm.balance,
@@ -24,10 +25,12 @@ class SQLAlchemyAccountRepository(IAccountRepository):
         )
 
     async def get_by_id(
-        self, account_id: UUID, only_active: bool = True
+        self, account_id: UUID, user_id: UUID | None = None, only_active: bool = True
     ) -> DomainAccount | None:
         async with get_session() as session:
             query = select(ORMAccount).where(ORMAccount.id == account_id)
+            if user_id:
+                query = query.where(ORMAccount.user_id == user_id)
             if only_active:
                 query = query.where(ORMAccount.is_active == True)
             orm = (await session.exec(query)).first()
@@ -35,6 +38,7 @@ class SQLAlchemyAccountRepository(IAccountRepository):
 
     async def list_all(
         self,
+        user_id: UUID | None = None,
         only_active: bool = True,
         account_type: str | None = None,
         limit: int = 50,
@@ -42,6 +46,8 @@ class SQLAlchemyAccountRepository(IAccountRepository):
     ) -> list[DomainAccount]:
         async with get_session() as session:
             query = select(ORMAccount)
+            if user_id:
+                query = query.where(ORMAccount.user_id == user_id)
             if only_active:
                 query = query.where(ORMAccount.is_active == True)
             if account_type:
@@ -52,8 +58,23 @@ class SQLAlchemyAccountRepository(IAccountRepository):
 
     async def create(self, account: DomainAccount) -> DomainAccount:
         async with get_session() as session:
+            effective_user_id = account.user_id
+            if not effective_user_id or effective_user_id == UUID(
+                "00000000-0000-0000-0000-000000000000"
+            ):
+                from contas.models.user import User as ORMUser
+
+                default_user = (
+                    await session.exec(
+                        select(ORMUser).order_by(ORMUser.created_at.asc()).limit(1)
+                    )
+                ).first()
+                if default_user:
+                    effective_user_id = default_user.id
+
             orm = ORMAccount(
                 id=account.id,
+                user_id=effective_user_id,
                 name=account.name,
                 account_type=account.account_type,
                 balance=account.balance,
@@ -68,11 +89,10 @@ class SQLAlchemyAccountRepository(IAccountRepository):
 
     async def update(self, account: DomainAccount) -> DomainAccount:
         async with get_session() as session:
-            orm = (
-                await session.exec(
-                    select(ORMAccount).where(ORMAccount.id == account.id)
-                )
-            ).first()
+            query = select(ORMAccount).where(ORMAccount.id == account.id)
+            if account.user_id:
+                query = query.where(ORMAccount.user_id == account.user_id)
+            orm = (await session.exec(query)).first()
             if not orm:
                 raise AccountNotFoundError(str(account.id))
             orm.name = account.name
@@ -85,13 +105,12 @@ class SQLAlchemyAccountRepository(IAccountRepository):
             await session.refresh(orm)
             return self._to_domain(orm)
 
-    async def delete(self, account_id: UUID) -> bool:
+    async def delete(self, account_id: UUID, user_id: UUID | None = None) -> bool:
         async with get_session() as session, session.begin():
-            orm = (
-                await session.exec(
-                    select(ORMAccount).where(ORMAccount.id == account_id)
-                )
-            ).first()
+            query = select(ORMAccount).where(ORMAccount.id == account_id)
+            if user_id:
+                query = query.where(ORMAccount.user_id == user_id)
+            orm = (await session.exec(query)).first()
             if not orm:
                 return False
             # remove transactions referencing account
@@ -99,23 +118,29 @@ class SQLAlchemyAccountRepository(IAccountRepository):
                 (ORMTransaction.source_account_id == account_id)
                 | (ORMTransaction.destination_account_id == account_id)
             )
+            if user_id:
+                tx_stmt = tx_stmt.where(ORMTransaction.user_id == user_id)
             txs = (await session.exec(tx_stmt)).all()
             for tx in txs:
                 await session.delete(tx)
             await session.delete(orm)
             return True
 
-    async def bulk_delete(self, account_ids: list[UUID], cascade: bool = False) -> int:
+    async def bulk_delete(
+        self,
+        account_ids: list[UUID],
+        user_id: UUID | None = None,
+        cascade: bool = False,
+    ) -> int:
         if not account_ids:
             return 0
         deleted_count = 0
         async with get_session() as session, session.begin():
             for acc_id in account_ids:
-                acc = (
-                    await session.exec(
-                        select(ORMAccount).where(ORMAccount.id == acc_id)
-                    )
-                ).first()
+                query = select(ORMAccount).where(ORMAccount.id == acc_id)
+                if user_id:
+                    query = query.where(ORMAccount.user_id == user_id)
+                acc = (await session.exec(query)).first()
                 if not acc:
                     continue
 
@@ -123,6 +148,8 @@ class SQLAlchemyAccountRepository(IAccountRepository):
                     (ORMTransaction.source_account_id == acc_id)
                     | (ORMTransaction.destination_account_id == acc_id)
                 )
+                if user_id:
+                    tx_stmt = tx_stmt.where(ORMTransaction.user_id == user_id)
                 transactions = (await session.exec(tx_stmt)).all()
 
                 if transactions and not cascade:

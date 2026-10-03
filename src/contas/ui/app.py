@@ -46,19 +46,45 @@ def run_app():
 
 
 def main():
+    # -------------------------------------------------------------
+    # INTERCEPTOR DE AUTENTICAÇÃO
+    # -------------------------------------------------------------
+    from contas.ui.views.auth import render_auth_view
+
+    current_user = st.session_state.get("user")
+    if not current_user or not st.session_state.get("authenticated"):
+        render_auth_view()
+        return
+
+    current_user_id = UUID(current_user["id"])
+    user_role = current_user.get("role", "user")
+
+    # Sidebar com dados do usuário logado
+    st.sidebar.markdown(f"### 👤 {current_user['name']}")
+    role_badge = "👑 Administrador" if user_role == "admin" else "👤 Usuário"
+    st.sidebar.caption(f"{role_badge} • @{current_user['username']}")
+    if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+    st.sidebar.divider()
     st.sidebar.title("💰 Contas")
     st.sidebar.caption("Gestão Financeira Residencial Inteligente")
 
+    nav_options = [
+        "📊 Dashboard & Extrato",
+        "➕ Novo Lançamento",
+        "🧾 Importar Fatura PDF",
+        "💬 Assistente Financeiro",
+        "🎯 Orçamentos & Metas",
+        "⚙️ Configurações",
+    ]
+    if user_role == "admin":
+        nav_options.append("👥 Gerenciamento de Usuários")
+
     menu = st.sidebar.radio(
         "Navegação",
-        [
-            "📊 Dashboard & Extrato",
-            "➕ Novo Lançamento",
-            "🧾 Importar Fatura PDF",
-            "💬 Assistente Financeiro",
-            "🎯 Orçamentos & Metas",
-            "⚙️ Configurações",
-        ],
+        nav_options,
         index=0,
     )
 
@@ -69,7 +95,7 @@ def main():
         st.title("📊 Visão Geral das Finanças")
 
         # Carregar Contas
-        accounts_data = UIService.list_accounts()
+        accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
         total_balance = sum(float(a["balance"]) for a in accounts)
 
@@ -141,6 +167,7 @@ def main():
                     end_date=end_date.isoformat(),
                     include_pending=include_pending,
                     date_type=date_type_val,
+                    user_id=current_user_id,
                 )
 
                 txs = statement.get("transactions", [])
@@ -368,13 +395,13 @@ def main():
     elif menu == "➕ Novo Lançamento":
         st.title("➕ Registrar Transação")
 
-        accounts_data = UIService.list_accounts()
+        accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
 
         if not accounts:
             st.warning("Cadastre uma conta antes de realizar lançamentos.")
         else:
-            categories_data = UIService.list_categories()
+            categories_data = UIService.list_categories(user_id=current_user_id)
             categories = categories_data.get("categories", [])
 
             # Seleções fora do form para permitir lógica condicional
@@ -498,6 +525,7 @@ def main():
                             due_date=f"{data_venc.isoformat()}T12:00:00Z",
                             total_installments=qtd_parcelas if is_parcelada else None,
                             total_amount=valor if is_parcelada else None,
+                            user_id=current_user_id,
                         )
 
                         if "error" in res:
@@ -525,9 +553,11 @@ def main():
             "Carregue sua fatura em PDF, use o chat interativo para filtrar despesas com IA e importe os lançamentos com um clique."
         )
 
-        accounts_data = UIService.list_accounts()
+        accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
-        categories_data = UIService.list_categories(category_type="expense")
+        categories_data = UIService.list_categories(
+            category_type="expense", user_id=current_user_id
+        )
         categories = categories_data.get("categories", [])
         category_names = [c["name"] for c in categories]
 
@@ -942,6 +972,7 @@ def main():
                                     status=status_to_save.value,
                                     total_installments=tot_inst,
                                     installment_number=cur_inst,
+                                    user_id=current_user_id,
                                 )
                                 if "error" in res:
                                     errors.append(
@@ -1171,7 +1202,9 @@ def main():
         with col_y:
             ano = st.number_input("Ano", min_value=2020, max_value=2030, value=now.year)
 
-        status_data = UIService.get_budget_status(month=mes, year=ano)
+        status_data = UIService.get_budget_status(
+            month=mes, year=ano, user_id=current_user_id
+        )
         summary = status_data.get("summary", {})
         budgets = status_data.get("budgets", [])
 
@@ -1214,7 +1247,9 @@ def main():
 
         # Formulário para Definir/Atualizar Orçamento
         st.subheader("➕ Definir ou Atualizar Orçamento")
-        categories_data = UIService.list_categories(category_type="expense")
+        categories_data = UIService.list_categories(
+            category_type="expense", user_id=current_user_id
+        )
         expense_cats = categories_data.get("categories", [])
 
         if expense_cats:
@@ -1233,6 +1268,7 @@ def main():
                             amount=b_val,
                             month=mes,
                             year=ano,
+                            user_id=current_user_id,
                         )
                         if "error" in res:
                             st.error(f"Erro: {res['error']['message']}")
@@ -1273,7 +1309,9 @@ def main():
                 )
                 acc_init = st.text_input("Saldo Inicial (R$)", value="0.00")
                 if st.form_submit_button("Criar Conta"):
-                    res = UIService.create_account(acc_name, acc_type, acc_init)
+                    res = UIService.create_account(
+                        acc_name, acc_type, acc_init, user_id=current_user_id
+                    )
                     if "error" in res:
                         st.error(f"Erro: {res['error']['message']}")
                     else:
@@ -1288,7 +1326,9 @@ def main():
                     "Tipo", [CategoryType.EXPENSE, CategoryType.INCOME]
                 )
                 if st.form_submit_button("Criar Categoria"):
-                    res = UIService.create_category(cat_name, cat_type)
+                    res = UIService.create_category(
+                        cat_name, cat_type, user_id=current_user_id
+                    )
                     if "error" in res:
                         st.error(f"Erro: {res['error']['message']}")
                     else:
@@ -1299,7 +1339,9 @@ def main():
 
         # Edição de Nome de Conta
         st.subheader("✏️ Editar Nome da Conta")
-        accounts_data = UIService.list_accounts(include_inactive=True)
+        accounts_data = UIService.list_accounts(
+            include_inactive=True, user_id=current_user_id
+        )
         all_accounts = accounts_data.get("accounts", [])
 
         if not all_accounts:
@@ -1470,6 +1512,75 @@ def main():
 
                     st.session_state[accounts_select_key] = False
                     st.rerun()
+
+    # -------------------------------------------------------------
+    # 7. GERENCIAMENTO DE USUÁRIOS (ADMIN)
+    # -------------------------------------------------------------
+    elif menu == "👥 Gerenciamento de Usuários":
+        st.title("👥 Gerenciamento e Aprovação de Usuários")
+        st.caption(
+            "Apenas administradores podem aprovar o acesso de novos usuários ao sistema."
+        )
+
+        users = UIService.list_users()
+
+        pending_users = [u for u in users if not u.get("is_approved")]
+        approved_users = [u for u in users if u.get("is_approved")]
+
+        # Seção de Cadastros Pendentes
+        st.subheader(f"⏳ Cadastros Aguardando Aprovação ({len(pending_users)})")
+        if not pending_users:
+            st.success("Nenhum usuário aguardando aprovação no momento.")
+        else:
+            for pu in pending_users:
+                with st.container(border=True):
+                    col_info, col_actions = st.columns([3, 1.5])
+                    with col_info:
+                        st.markdown(f"**{pu['name']}** (@{pu['username']})")
+                        st.caption(
+                            f"E-mail: `{pu['email']}` • Provedor: `{pu['auth_provider']}` • Cadastro: {pu['created_at'][:10]}"
+                        )
+                    with col_actions:
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            if st.button(
+                                "✅ Aprovar",
+                                key=f"btn_approve_{pu['id']}",
+                                type="primary",
+                            ):
+                                res = UIService.approve_user(
+                                    user_id=pu["id"], approve=True
+                                )
+                                st.success(f"Usuário '{pu['name']}' aprovado!")
+                                st.rerun()
+                        with col_btn2:
+                            if st.button("❌ Rejeitar", key=f"btn_reject_{pu['id']}"):
+                                res = UIService.approve_user(
+                                    user_id=pu["id"], approve=False
+                                )
+                                st.info(f"Usuário '{pu['name']}' mantido bloqueado.")
+                                st.rerun()
+
+        st.divider()
+
+        # Seção de Usuários Ativos / Aprovados
+        st.subheader(f"✅ Usuários Aprovados ({len(approved_users)})")
+        if approved_users:
+            users_df = pd.DataFrame(
+                [
+                    {
+                        "ID": u["id"],
+                        "Nome": u["name"],
+                        "Login": u["username"],
+                        "E-mail": u["email"],
+                        "Perfil": u.get("role", "user").upper(),
+                        "Provedor": u.get("auth_provider", "local").upper(),
+                        "Ativo": "Sim" if u.get("is_active") else "Não",
+                    }
+                    for u in approved_users
+                ]
+            )
+            st.dataframe(users_df, use_container_width=True, hide_index=True)
 
 
 if __name__ == "__main__":

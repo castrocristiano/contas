@@ -72,6 +72,10 @@ class RecordTransactionInput(BaseModel):
         description="Total purchase amount if split across installments (e.g. '1200.00'). Optional.",
         pattern=r"^[0-9]+(\.[0-9]{1,2})?$",
     )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Owner user ID",
+    )
 
     @model_validator(mode="after")
     def validate_transaction(self) -> "RecordTransactionInput":
@@ -157,6 +161,10 @@ class GetStatementInput(BaseModel):
     search: str | None = Field(
         default=None,
         description="Optional case-insensitive substring search in description (e.g., 'PICPAY', 'MERCADO').",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Filter by owner user ID.",
     )
 
     @model_validator(mode="after")
@@ -250,6 +258,10 @@ class GetFinancialSummaryInput(BaseModel):
         le=2100,
         description="Year of reference (e.g. 2026).",
     )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Filter by owner user ID.",
+    )
 
 
 class FinancialSummaryAccountItem(BaseModel):
@@ -277,6 +289,10 @@ class GetInstallmentPlanInput(BaseModel):
     installment_id: UUID = Field(
         ...,
         description="UUID of the installment plan to retrieve",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Filter by owner user ID.",
     )
 
 
@@ -316,6 +332,10 @@ class DeleteTransactionInput(BaseModel):
     delete_all_installments: bool = Field(
         default=False,
         description="If True and the transaction is part of an installment plan, deletes all installments of that plan.",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Owner user ID",
     )
 
 

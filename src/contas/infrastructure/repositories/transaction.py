@@ -15,6 +15,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
     def _to_domain(self, orm: ORMTransaction) -> DomainTransaction:
         return DomainTransaction(
             id=orm.id,
+            user_id=orm.user_id,
             amount=orm.amount,
             transaction_type=TransactionType(orm.transaction_type),
             status=TransactionStatus(orm.status),
@@ -30,19 +31,35 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
             created_at=orm.created_at,
         )
 
-    async def get_by_id(self, transaction_id: UUID) -> DomainTransaction | None:
+    async def get_by_id(
+        self, transaction_id: UUID, user_id: UUID | None = None
+    ) -> DomainTransaction | None:
         async with get_session() as session:
-            orm = (
-                await session.exec(
-                    select(ORMTransaction).where(ORMTransaction.id == transaction_id)
-                )
-            ).first()
+            query = select(ORMTransaction).where(ORMTransaction.id == transaction_id)
+            if user_id:
+                query = query.where(ORMTransaction.user_id == user_id)
+            orm = (await session.exec(query)).first()
             return self._to_domain(orm) if orm else None
 
     async def create(self, transaction: DomainTransaction) -> DomainTransaction:
         async with get_session() as session:
+            effective_user_id = transaction.user_id
+            if not effective_user_id or effective_user_id == UUID(
+                "00000000-0000-0000-0000-000000000000"
+            ):
+                from contas.models.user import User as ORMUser
+
+                default_user = (
+                    await session.exec(
+                        select(ORMUser).order_by(ORMUser.created_at.asc()).limit(1)
+                    )
+                ).first()
+                if default_user:
+                    effective_user_id = default_user.id
+
             orm = ORMTransaction(
                 id=transaction.id,
+                user_id=effective_user_id,
                 amount=transaction.amount,
                 transaction_type=transaction.transaction_type,
                 status=transaction.status,
@@ -68,25 +85,47 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
         if not transactions:
             return []
         async with get_session() as session:
-            orm_list = [
-                ORMTransaction(
-                    id=tx.id,
-                    amount=tx.amount,
-                    transaction_type=tx.transaction_type,
-                    status=tx.status,
-                    transaction_date=tx.transaction_date,
-                    due_date=tx.due_date,
-                    description=tx.description,
-                    source_account_id=tx.source_account_id,
-                    destination_account_id=tx.destination_account_id,
-                    category_id=tx.category_id,
-                    installment_id=tx.installment_id,
-                    installment_number=tx.installment_number,
-                    total_installments=tx.total_installments,
-                    created_at=tx.created_at,
+            from contas.models.user import User as ORMUser
+
+            default_user = None
+
+            orm_list = []
+            for tx in transactions:
+                effective_user_id = tx.user_id
+                if not effective_user_id or effective_user_id == UUID(
+                    "00000000-0000-0000-0000-000000000000"
+                ):
+                    if default_user is None:
+                        default_user = (
+                            await session.exec(
+                                select(ORMUser)
+                                .order_by(ORMUser.created_at.asc())
+                                .limit(1)
+                            )
+                        ).first()
+                    if default_user:
+                        effective_user_id = default_user.id
+
+                orm_list.append(
+                    ORMTransaction(
+                        id=tx.id,
+                        user_id=effective_user_id,
+                        amount=tx.amount,
+                        transaction_type=tx.transaction_type,
+                        status=tx.status,
+                        transaction_date=tx.transaction_date,
+                        due_date=tx.due_date,
+                        description=tx.description,
+                        source_account_id=tx.source_account_id,
+                        destination_account_id=tx.destination_account_id,
+                        category_id=tx.category_id,
+                        installment_id=tx.installment_id,
+                        installment_number=tx.installment_number,
+                        total_installments=tx.total_installments,
+                        created_at=tx.created_at,
+                    )
                 )
-                for tx in transactions
-            ]
+
             for orm in orm_list:
                 session.add(orm)
             await session.commit()
@@ -94,29 +133,29 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
                 await session.refresh(orm)
             return [self._to_domain(orm) for orm in orm_list]
 
-    async def delete(self, transaction_id: UUID) -> bool:
+    async def delete(self, transaction_id: UUID, user_id: UUID | None = None) -> bool:
         async with get_session() as session, session.begin():
-            orm = (
-                await session.exec(
-                    select(ORMTransaction).where(ORMTransaction.id == transaction_id)
-                )
-            ).first()
+            query = select(ORMTransaction).where(ORMTransaction.id == transaction_id)
+            if user_id:
+                query = query.where(ORMTransaction.user_id == user_id)
+            orm = (await session.exec(query)).first()
             if not orm:
                 return False
             await session.delete(orm)
             return True
 
-    async def bulk_delete(self, transaction_ids: list[UUID]) -> int:
+    async def bulk_delete(
+        self, transaction_ids: list[UUID], user_id: UUID | None = None
+    ) -> int:
         if not transaction_ids:
             return 0
         deleted = 0
         async with get_session() as session, session.begin():
             for tid in transaction_ids:
-                orm = (
-                    await session.exec(
-                        select(ORMTransaction).where(ORMTransaction.id == tid)
-                    )
-                ).first()
+                query = select(ORMTransaction).where(ORMTransaction.id == tid)
+                if user_id:
+                    query = query.where(ORMTransaction.user_id == user_id)
+                orm = (await session.exec(query)).first()
                 if orm:
                     await session.delete(orm)
                     deleted += 1
@@ -125,6 +164,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
     async def list_by_account(
         self,
         account_id: UUID,
+        user_id: UUID | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
@@ -136,6 +176,8 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
             query = select(ORMTransaction).where(
                 ORMTransaction.source_account_id == account_id
             )
+            if user_id:
+                query = query.where(ORMTransaction.user_id == user_id)
             date_col = (
                 ORMTransaction.due_date
                 if date_type == "due_date"
@@ -152,47 +194,56 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
             return [self._to_domain(t) for t in results]
 
     async def list_by_installment_id(
-        self, installment_id: UUID
+        self, installment_id: UUID, user_id: UUID | None = None
     ) -> list[DomainTransaction]:
         async with get_session() as session:
-            query = (
-                select(ORMTransaction)
-                .where(ORMTransaction.installment_id == installment_id)
-                .order_by(ORMTransaction.installment_number.asc())
+            query = select(ORMTransaction).where(
+                ORMTransaction.installment_id == installment_id
             )
+            if user_id:
+                query = query.where(ORMTransaction.user_id == user_id)
+            query = query.order_by(ORMTransaction.installment_number.asc())
             results = (await session.exec(query)).all()
             return [self._to_domain(t) for t in results]
 
     async def delete_by_installment_id(
-        self, installment_id: UUID
+        self, installment_id: UUID, user_id: UUID | None = None
     ) -> list[DomainTransaction]:
         async with get_session() as session, session.begin():
             query = select(ORMTransaction).where(
                 ORMTransaction.installment_id == installment_id
             )
+            if user_id:
+                query = query.where(ORMTransaction.user_id == user_id)
             results = (await session.exec(query)).all()
             for tx in results:
                 await session.delete(tx)
             return [self._to_domain(t) for t in results]
 
-    async def count_by_account(self, account_id: UUID) -> int:
+    async def count_by_account(
+        self, account_id: UUID, user_id: UUID | None = None
+    ) -> int:
         async with get_session() as session:
             tx_stmt = select(ORMTransaction).where(
                 (ORMTransaction.source_account_id == account_id)
                 | (ORMTransaction.destination_account_id == account_id)
             )
+            if user_id:
+                tx_stmt = tx_stmt.where(ORMTransaction.user_id == user_id)
             results = (await session.exec(tx_stmt)).all()
             return len(results)
 
     async def get_summary_by_account(
         self,
         account_id: UUID,
+        user_id: UUID | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
     ) -> dict[str, Decimal]:
         txs = await self.list_by_account(
             account_id=account_id,
+            user_id=user_id,
             start_date=start_date,
             end_date=end_date,
             date_type=date_type,

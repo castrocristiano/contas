@@ -95,19 +95,23 @@ class RecordTransactionUseCase:
 
         # 1. Validate source account
         source_account = await self.account_repo.get_by_id(
-            payload.source_account_id, only_active=True
+            payload.source_account_id, user_id=payload.user_id, only_active=True
         )
         if not source_account:
             raise AccountNotFoundError(
                 str(payload.source_account_id), field="source_account_id"
             )
 
+        tx_user_id = payload.user_id or source_account.user_id
+
         # 2. Validate destination account
         destination_account = None
         if payload.transaction_type == TransactionType.TRANSFER:
             assert payload.destination_account_id is not None
             destination_account = await self.account_repo.get_by_id(
-                payload.destination_account_id, only_active=True
+                payload.destination_account_id,
+                user_id=payload.user_id,
+                only_active=True,
             )
             if not destination_account:
                 raise AccountNotFoundError(
@@ -117,7 +121,7 @@ class RecordTransactionUseCase:
         # 3. Validate category
         if payload.category_id:
             category = await self.category_repo.get_by_id(
-                payload.category_id, only_active=True
+                payload.category_id, user_id=payload.user_id, only_active=True
             )
             if not category:
                 raise CategoryNotFoundError(str(payload.category_id))
@@ -147,6 +151,7 @@ class RecordTransactionUseCase:
             source_account_id=payload.source_account_id,
             destination_account_id=payload.destination_account_id,
             category_id=payload.category_id,
+            user_id=tx_user_id,
             installment_id=installment_id,
             installment_number=1 if is_installment else payload.installment_number,
             total_installments=total_installments,
@@ -170,6 +175,7 @@ class RecordTransactionUseCase:
                         source_account_id=payload.source_account_id,
                         destination_account_id=payload.destination_account_id,
                         category_id=payload.category_id,
+                        user_id=tx_user_id,
                         installment_id=installment_id,
                         installment_number=idx,
                         total_installments=total_installments,
@@ -220,13 +226,14 @@ class GetStatementUseCase:
             e_date = e_date.replace(tzinfo=UTC)
 
         account = await self.account_repo.get_by_id(
-            payload.account_id, only_active=False
+            payload.account_id, user_id=payload.user_id, only_active=False
         )
         if not account:
             raise AccountNotFoundError(str(payload.account_id))
 
         transactions = await self.transaction_repo.list_by_account(
             account_id=payload.account_id,
+            user_id=payload.user_id,
             start_date=s_date,
             end_date=e_date,
             date_type=payload.date_type,
@@ -254,7 +261,7 @@ class GetStatementUseCase:
             category_name = None
             if tx.category_id:
                 cat = await self.category_repo.get_by_id(
-                    tx.category_id, only_active=False
+                    tx.category_id, user_id=payload.user_id, only_active=False
                 )
                 if cat:
                     category_name = cat.name
@@ -305,7 +312,7 @@ class GetInstallmentPlanUseCase:
 
     async def execute(self, payload: GetInstallmentPlanInput) -> dict[str, Any]:
         transactions = await self.transaction_repo.list_by_installment_id(
-            payload.installment_id
+            payload.installment_id, user_id=payload.user_id
         )
         if not transactions:
             raise InstallmentPlanNotFoundError(str(payload.installment_id))
@@ -364,14 +371,16 @@ class DeleteTransactionUseCase:
         self.transaction_repo = transaction_repo
 
     async def execute(self, payload: DeleteTransactionInput) -> dict[str, Any]:
-        tx = await self.transaction_repo.get_by_id(payload.transaction_id)
+        tx = await self.transaction_repo.get_by_id(
+            payload.transaction_id, user_id=payload.user_id
+        )
         if not tx:
             raise TransactionNotFoundError(str(payload.transaction_id))
 
         transactions_to_delete = []
         if payload.delete_all_installments and tx.installment_id is not None:
             transactions_to_delete = await self.transaction_repo.list_by_installment_id(
-                tx.installment_id
+                tx.installment_id, user_id=payload.user_id
             )
         else:
             transactions_to_delete = [tx]
@@ -380,7 +389,7 @@ class DeleteTransactionUseCase:
         for item in transactions_to_delete:
             if item.status == TransactionStatus.CLEARED:
                 source_account = await self.account_repo.get_by_id(
-                    item.source_account_id, only_active=False
+                    item.source_account_id, user_id=payload.user_id, only_active=False
                 )
                 if source_account:
                     if item.transaction_type == TransactionType.EXPENSE:
@@ -394,14 +403,16 @@ class DeleteTransactionUseCase:
                         reverted_total += item.amount
                         if item.destination_account_id:
                             dest = await self.account_repo.get_by_id(
-                                item.destination_account_id, only_active=False
+                                item.destination_account_id,
+                                user_id=payload.user_id,
+                                only_active=False,
                             )
                             if dest:
                                 dest.balance -= item.amount
                                 await self.account_repo.update(dest)
                     await self.account_repo.update(source_account)
 
-            await self.transaction_repo.delete(item.id)
+            await self.transaction_repo.delete(item.id, user_id=payload.user_id)
 
         count = len(transactions_to_delete)
         return DeleteTransactionResponse(
@@ -429,7 +440,9 @@ class GetFinancialSummaryUseCase:
         else:
             ref_date = datetime.now(UTC).date().isoformat()
 
-        accounts = await self.account_repo.list_all(only_active=True, limit=1000)
+        accounts = await self.account_repo.list_all(
+            user_id=payload.user_id, only_active=True, limit=1000
+        )
 
         total = sum((acc.balance for acc in accounts), Decimal("0.00"))
         currency = accounts[0].currency if accounts else "BRL"

@@ -26,6 +26,12 @@ class Transaction(SQLModel, table=True):
     __tablename__ = "transaction"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        ondelete="CASCADE",
+        nullable=False,
+        index=True,
+    )
     amount: Decimal = Field(
         sa_type=Numeric(14, 2),
         max_digits=14,

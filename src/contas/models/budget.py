@@ -14,11 +14,21 @@ class Budget(SQLModel, table=True):
     __tablename__ = "budget"
     __table_args__ = (
         UniqueConstraint(
-            "category_id", "month", "year", name="uq_budget_category_period"
+            "user_id",
+            "category_id",
+            "month",
+            "year",
+            name="uq_budget_user_category_period",
         ),
     )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        ondelete="CASCADE",
+        nullable=False,
+        index=True,
+    )
     category_id: uuid.UUID = Field(
         foreign_key="category.id",
         ondelete="RESTRICT",
