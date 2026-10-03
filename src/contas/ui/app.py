@@ -717,10 +717,15 @@ def main():
                     st.session_state.pop("editor_invoice_items", None)
                     st.rerun()
             with inv_col3:
-                if st.button("🎯 Apenas Fatura Atual (Sem Futuras)", key="btn_invoice_select_current_only"):
+                if st.button(
+                    "🎯 Apenas Fatura Atual (Sem Futuras)",
+                    key="btn_invoice_select_current_only",
+                ):
                     st.session_state[invoice_select_key] = True
                     for item in items:
-                        item["selected_for_import"] = not bool(item.get("is_future", False))
+                        item["selected_for_import"] = not bool(
+                            item.get("is_future", False)
+                        )
                     st.session_state.pop("editor_invoice_items", None)
                     st.rerun()
 
