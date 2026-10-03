@@ -19,9 +19,16 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Deploy to GitHub Wiki
+        id: deploy-wiki
+        continue-on-error: true
         uses: Andrew-Chen-Wang/github-wiki-action@v4
         with:
           strategy: clone
           path: wiki/
         env:
           WIKI_ACTION_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Wiki Deploy Status
+        if: steps.deploy-wiki.outcome == 'failure'
+        run: |
+          echo "::warning title=GitHub Wiki não inicializada::Para que a action consiga sincronizar a pasta wiki/, a funcionalidade de Wiki precisa estar habilitada nas configurações do repositório no GitHub (Settings -> Features -> Wikis) e a primeira página precisa ser criada via interface do GitHub (ou use um Personal Access Token com escopo de repo se o GITHUB_TOKEN tiver restrição)."
