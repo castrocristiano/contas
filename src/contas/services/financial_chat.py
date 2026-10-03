@@ -280,6 +280,34 @@ _TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "update_account",
+            "description": (
+                "Atualiza ou renomeia uma conta financeira existente. "
+                "Use quando o usuário pedir para renomear, mudar o nome ou alterar o status de uma conta (ex: 'renomeie a conta Cartão para Cartão Magalu')."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "account_name": {
+                        "type": "string",
+                        "description": "Nome atual da conta a ser alterada (ex: 'Cartão').",
+                    },
+                    "new_name": {
+                        "type": "string",
+                        "description": "Novo nome desejado para a conta (ex: 'Cartão Magalu').",
+                    },
+                    "is_active": {
+                        "type": "boolean",
+                        "description": "Status ativo (True) ou inativo (False) da conta.",
+                    },
+                },
+                "required": ["account_name"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "create_category",
             "description": (
                 "Cria uma nova categoria financeira para receitas ou despesas."
@@ -602,6 +630,24 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         logger.info("create_account result: %s", res)
         return res
 
+    if pending.tool_name == "update_account":
+        acc_name = args.get("account_name", "")
+        account = next(
+            (a for a in pending.accounts if acc_name.lower() in a["name"].lower()),
+            None,
+        )
+        if not account:
+            return {"error": {"message": f"Conta '{acc_name}' não encontrada."}}
+        from uuid import UUID
+
+        res = UIService.update_account(
+            account_id=UUID(account["id"]),
+            name=args.get("new_name"),
+            is_active=args.get("is_active"),
+        )
+        logger.info("update_account result: %s", res)
+        return res
+
     if pending.tool_name == "create_category":
         res = UIService.create_category(
             name=args["name"],
@@ -763,6 +809,16 @@ def _build_action_summary(
             f"Criar conta **{args.get('name', '?')}** | "
             f"Tipo: {acc_type_label} | Saldo inicial: {initial_fmt}"
         )
+    if name == "update_account":
+        acc_name = args.get("account_name", "?")
+        new_name = args.get("new_name")
+        status_part = ""
+        if args.get("is_active") is not None:
+            status_part = " (Ativar)" if args.get("is_active") else " (Desativar)"
+        if new_name:
+            return f"✏️ **Renomear conta**: de **{acc_name}** para **{new_name}**{status_part}"
+        return f"✏️ **Atualizar status da conta**: **{acc_name}**{status_part}"
+
     if name == "create_category":
         c_type = "Receita" if args.get("category_type") == "income" else "Despesa"
         return f"Criar categoria de {c_type}: **{args.get('name', '?')}**"
@@ -848,6 +904,7 @@ _WRITE_TOOLS: frozenset[str] = frozenset(
     {
         "record_transaction",
         "create_account",
+        "update_account",
         "create_category",
         "set_budget",
         "delete_transaction",

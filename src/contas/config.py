@@ -12,9 +12,14 @@ class Settings(BaseSettings):
     openapi_key: str = ""
     openai_api_key: str = ""
     openaiapi_key: str = ""
-    invoice_model: str = "gpt-4o"
+    invoice_model: str = "o3-mini"
     openai_store: bool = True
     debug: bool = False
+
+    # Google OAuth
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    google_redirect_uri: str = "http://localhost:8501"
 
     @property
     def effective_openai_api_key(self) -> str:

@@ -28,6 +28,10 @@ class CreateAccountInput(BaseModel):
         description="Three-letter ISO 4217 currency code",
         pattern=r"^[A-Z]{3}$",
     )
+    user_id: UUID | None = Field(
+        default=None,
+        description="ID of the owner user (multi-tenant context).",
+    )
 
 
 class AccountResponse(BaseModel):
@@ -40,6 +44,7 @@ class AccountResponse(BaseModel):
     currency: str
     is_active: bool
     created_at: datetime
+    user_id: UUID | None = None
 
 
 class AccountSummary(BaseModel):
@@ -51,6 +56,7 @@ class AccountSummary(BaseModel):
     balance: str
     currency: str
     is_active: bool
+    user_id: UUID | None = None
 
 
 class ListAccountsInput(BaseModel):
@@ -58,7 +64,11 @@ class ListAccountsInput(BaseModel):
 
     include_inactive: bool = Field(
         default=False,
-        description="If true, also returns inactive accounts. Default: false.",
+        description="Whether to include inactive/deactivated accounts. Defaults to False.",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Filter accounts by owner user ID.",
     )
 
 
@@ -91,3 +101,22 @@ class DeleteAccountResponse(BaseModel):
     name: str
     action_taken: str  # "deleted" | "deactivated"
     message: str
+
+
+class UpdateAccountInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    account_id: UUID = Field(
+        ...,
+        description="UUID of the account to update.",
+    )
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="New display name of the account.",
+    )
+    is_active: bool | None = Field(
+        default=None,
+        description="Active status of the account.",
+    )

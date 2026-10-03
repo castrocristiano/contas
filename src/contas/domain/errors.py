@@ -98,4 +98,46 @@ class DatabaseError(DomainError):
         super().__init__(code="DATABASE_ERROR", message=message, details=details)
 
 
+class UserNotFoundError(DomainError):
+    def __init__(self, identifier: str) -> None:
+        super().__init__(
+            code="USER_NOT_FOUND",
+            message=f"Usuário '{identifier}' não foi encontrado.",
+            details={"identifier": identifier},
+        )
+
+
+class UserAlreadyExistsError(DomainError):
+    def __init__(self, field: str, value: str) -> None:
+        super().__init__(
+            code="USER_ALREADY_EXISTS",
+            message=f"Já existe um usuário com {field} '{value}'.",
+            details={"field": field, "value": value},
+        )
+
+
+class InvalidCredentialsError(DomainError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="INVALID_CREDENTIALS",
+            message="Usuário/e-mail ou senha incorretos.",
+        )
+
+
+class AccountPendingApprovalError(DomainError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="ACCOUNT_PENDING_APPROVAL",
+            message="Sua conta foi criada e está aguardando aprovação do administrador.",
+        )
+
+
+class InvalidCurrentPasswordError(DomainError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="INVALID_CURRENT_PASSWORD",
+            message="A senha atual informada está incorreta.",
+        )
+
+
 ContasError = DomainError

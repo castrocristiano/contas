@@ -8,6 +8,7 @@ from contas.schemas.account import (
     CreateAccountInput,
     DeleteAccountInput,
     ListAccountsInput,
+    UpdateAccountInput,
 )
 
 
@@ -33,6 +34,19 @@ def register_account_tools(mcp: MCPServer) -> None:
             return await container.list_accounts_uc.execute(payload)
         except ContasError as err:
             return err.to_dict()
+        except DBAPIError as err:
+            return DatabaseError(str(err.orig or err)).to_dict()
+
+    @mcp.tool()
+    async def update_account(payload: UpdateAccountInput) -> dict:
+        """Update an existing account's display name or status."""
+        try:
+            container = get_container()
+            return await container.update_account_uc.execute(payload)
+        except ContasError as err:
+            return err.to_dict()
+        except SAIntegrityError as err:
+            return IntegrityError(str(err.orig or err)).to_dict()
         except DBAPIError as err:
             return DatabaseError(str(err.orig or err)).to_dict()
 

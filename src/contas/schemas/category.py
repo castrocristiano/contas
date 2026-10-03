@@ -18,6 +18,10 @@ class CreateCategoryInput(BaseModel):
         ...,
         description="Type of the category: income or expense",
     )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Owner user ID",
+    )
 
 
 class CategoryResponse(BaseModel):
@@ -27,6 +31,7 @@ class CategoryResponse(BaseModel):
     name: str
     category_type: CategoryType
     is_active: bool
+    user_id: UUID | None = None
 
 
 class ListCategoriesInput(BaseModel):
@@ -39,6 +44,10 @@ class ListCategoriesInput(BaseModel):
     include_inactive: bool = Field(
         default=False,
         description="If true, also includes inactive categories. Default: false.",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Filter by owner user ID.",
     )
 
 

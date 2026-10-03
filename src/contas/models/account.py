@@ -24,6 +24,12 @@ class Account(SQLModel, table=True):
     __tablename__ = "account"
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        ondelete="CASCADE",
+        nullable=False,
+        index=True,
+    )
     name: str = Field(index=True, max_length=100, nullable=False)
     account_type: AccountType = Field(
         sa_column=Column(

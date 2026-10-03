@@ -12,6 +12,7 @@ from contas.application.ports.repositories import (
 from contas.application.use_cases.accounts import (
     CreateAccountUseCase,
     ListAccountsUseCase,
+    UpdateAccountUseCase,
 )
 from contas.application.use_cases.transactions import (
     RecordTransactionUseCase,
@@ -27,6 +28,7 @@ from contas.domain.errors import (
 from contas.schemas.account import (
     CreateAccountInput,
     ListAccountsInput,
+    UpdateAccountInput,
 )
 from contas.schemas.transaction import (
     RecordTransactionInput,
@@ -38,21 +40,26 @@ class InMemoryAccountRepository(IAccountRepository):
         self.accounts: dict[UUID, Account] = {}
 
     async def get_by_id(
-        self, account_id: UUID, only_active: bool = True
+        self, account_id: UUID, user_id: UUID | None = None, only_active: bool = True
     ) -> Account | None:
         acc = self.accounts.get(account_id)
+        if acc and user_id and acc.user_id != user_id:
+            return None
         if acc and only_active and not acc.is_active:
             return None
         return acc
 
     async def list_all(
         self,
+        user_id: UUID | None = None,
         only_active: bool = True,
         account_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Account]:
         res = list(self.accounts.values())
+        if user_id:
+            res = [a for a in res if a.user_id == user_id]
         if only_active:
             res = [a for a in res if a.is_active]
         if account_type:
@@ -67,16 +74,25 @@ class InMemoryAccountRepository(IAccountRepository):
         self.accounts[account.id] = account
         return account
 
-    async def delete(self, account_id: UUID) -> bool:
+    async def delete(self, account_id: UUID, user_id: UUID | None = None) -> bool:
         if account_id in self.accounts:
+            if user_id and self.accounts[account_id].user_id != user_id:
+                return False
             del self.accounts[account_id]
             return True
         return False
 
-    async def bulk_delete(self, account_ids: list[UUID], cascade: bool = False) -> int:
+    async def bulk_delete(
+        self,
+        account_ids: list[UUID],
+        cascade: bool = False,
+        user_id: UUID | None = None,
+    ) -> int:
         count = 0
         for aid in account_ids:
             if aid in self.accounts:
+                if user_id and self.accounts[aid].user_id != user_id:
+                    continue
                 del self.accounts[aid]
                 count += 1
         return count
@@ -87,27 +103,34 @@ class InMemoryCategoryRepository(ICategoryRepository):
         self.categories: dict[UUID, Category] = {}
 
     async def get_by_id(
-        self, category_id: UUID, only_active: bool = True
+        self, category_id: UUID, user_id: UUID | None = None, only_active: bool = True
     ) -> Category | None:
         cat = self.categories.get(category_id)
+        if cat and user_id and cat.user_id != user_id:
+            return None
         if cat and only_active and not cat.is_active:
             return None
         return cat
 
-    async def get_by_name(self, name: str) -> Category | None:
+    async def get_by_name(
+        self, name: str, user_id: UUID | None = None
+    ) -> Category | None:
         for c in self.categories.values():
-            if c.name == name:
+            if c.name == name and (user_id is None or c.user_id == user_id):
                 return c
         return None
 
     async def list_all(
         self,
+        user_id: UUID | None = None,
         only_active: bool = True,
         category_type: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Category]:
         res = list(self.categories.values())
+        if user_id:
+            res = [c for c in res if c.user_id == user_id]
         if only_active:
             res = [c for c in res if c.is_active]
         if category_type:
@@ -152,6 +175,7 @@ class InMemoryTransactionRepository(ITransactionRepository):
     async def list_by_account(
         self,
         account_id: UUID,
+        user_id: UUID | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
@@ -160,7 +184,10 @@ class InMemoryTransactionRepository(ITransactionRepository):
         offset: int = 0,
     ) -> list[Transaction]:
         res = [
-            t for t in self.transactions.values() if t.source_account_id == account_id
+            t
+            for t in self.transactions.values()
+            if t.source_account_id == account_id
+            and (user_id is None or t.user_id == user_id)
         ]
         if search:
             res = [t for t in res if search.lower() in t.description.lower()]
@@ -193,19 +220,25 @@ class InMemoryTransactionRepository(ITransactionRepository):
                 del self.transactions[tid]
         return deleted
 
-    async def count_by_account(self, account_id: UUID) -> int:
+    async def count_by_account(
+        self, account_id: UUID, user_id: UUID | None = None
+    ) -> int:
         return len(
             [
                 t
                 for t in self.transactions.values()
-                if t.source_account_id == account_id
-                or t.destination_account_id == account_id
+                if (
+                    t.source_account_id == account_id
+                    or t.destination_account_id == account_id
+                )
+                and (user_id is None or t.user_id == user_id)
             ]
         )
 
     async def get_summary_by_account(
         self,
         account_id: UUID,
+        user_id: UUID | None = None,
         start_date: datetime | None = None,
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
@@ -479,3 +512,42 @@ async def test_get_statement_filter_by_date_type():
     assert len(res_due_date["transactions"]) == 1
     assert res_due_date["transactions"][0]["description"] == "Compra Setembro"
     assert "2026-10-10" in res_due_date["transactions"][0]["due_date"]
+
+
+@pytest.mark.anyio
+async def test_update_account_use_case_success():
+    repo = InMemoryAccountRepository()
+    acc = Account(
+        name="Nubank Antigo",
+        account_type=AccountType.CHECKING,
+        balance=Decimal("100.00"),
+    )
+    await repo.create(acc)
+
+    uc = UpdateAccountUseCase(repo)
+    updated = await uc.execute(
+        UpdateAccountInput(
+            account_id=acc.id,
+            name="Nubank Principal",
+        )
+    )
+
+    assert updated["id"] == str(acc.id)
+    assert updated["name"] == "Nubank Principal"
+    persisted = await repo.get_by_id(acc.id)
+    assert persisted is not None
+    assert persisted.name == "Nubank Principal"
+
+
+@pytest.mark.anyio
+async def test_update_account_use_case_not_found():
+    repo = InMemoryAccountRepository()
+    uc = UpdateAccountUseCase(repo)
+
+    with pytest.raises(AccountNotFoundError):
+        await uc.execute(
+            UpdateAccountInput(
+                account_id=uuid4(),
+                name="Inexistente",
+            )
+        )

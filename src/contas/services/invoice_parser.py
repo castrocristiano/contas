@@ -1,5 +1,6 @@
 import io
 import json
+import logging
 import re
 from typing import Any
 
@@ -8,6 +9,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from pypdf import PdfReader
 
 from contas.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 def extract_installment_from_description(text: str) -> tuple[int | None, int | None]:
@@ -101,6 +104,10 @@ class InvoiceExtractionContainer(BaseModel):
     invoice_due_date: str | None = Field(
         default=None,
         description="Due date of the invoice in ISO 8601 format (YYYY-MM-DD), found in the header or payment slip (e.g., '2026-09-20').",
+    )
+    invoice_total_amount: str | None = Field(
+        default=None,
+        description="Total amount of the invoice as stated on the header/summary/payment slip (e.g. '4138.00').",
     )
     items: list[ExtractedInvoiceItem] = Field(
         default_factory=list,
@@ -215,6 +222,7 @@ def parse_invoice_with_openai(
     pdf_text: str,
     categories: list[str],
     client: OpenAI | None = None,
+    model: str | None = None,
 ) -> InvoiceExtractionContainer:
     """Parse raw PDF invoice text into structured items using OpenAI Structured Outputs."""
     if not pdf_text.strip():
@@ -250,10 +258,10 @@ def parse_invoice_with_openai(
         "9. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
         "10. Se a linha indicar parcelas em qualquer formato (ex: '02/10', 'Parcela 3 de 5', 'D02/04', '02/04' no final do nome do estabelecimento ou na descrição), extraia obrigatoriamente installment_current e installment_total.\n"
         f"11. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
-        "12. Identifique também o 'invoice_due_date' (data de vencimento da fatura, formato 'YYYY-MM-DD') e 'invoice_period' encontrados no cabeçalho ou resumo da fatura.\n"
+        "12. Identifique também o 'invoice_due_date' (data de vencimento da fatura, formato 'YYYY-MM-DD'), 'invoice_period' (ex: 'Setembro/2026') e 'invoice_total_amount' (valor total da fatura/boleto impresso no cabeçalho ou resumo, apenas números positivos com ponto, ex: '4138.00').\n"
     )
 
-    model_to_use = settings.invoice_model or "gpt-4o"
+    model_to_use = model or settings.invoice_model or "gpt-4o"
 
     completion = client.beta.chat.completions.parse(
         model=model_to_use,
@@ -266,7 +274,37 @@ def parse_invoice_with_openai(
         metadata={"app": "contas", "feature": "invoice_parser"},
     )
 
-    return completion.choices[0].message.parsed
+    parsed = completion.choices[0].message.parsed
+
+    # Reconciliação Matemática em Log
+    try:
+        current_invoice_items = [it for it in parsed.items if not bool(it.is_future)]
+        sum_current = sum(float(it.amount) for it in current_invoice_items)
+        sum_total = sum(float(it.amount) for it in parsed.items)
+        declared_total = (
+            float(parsed.invoice_total_amount) if parsed.invoice_total_amount else None
+        )
+
+        log_msg = (
+            f"[RECONCILIAÇÃO FATURA] Modelo: {model_to_use} | "
+            f"Total de itens extraídos: {len(parsed.items)} (Atuais: {len(current_invoice_items)}) | "
+            f"Soma itens atuais: R$ {sum_current:.2f} | Soma total: R$ {sum_total:.2f}"
+        )
+        if declared_total is not None:
+            diff = round(declared_total - sum_current, 2)
+            log_msg += f" | Total declarado no boleto: R$ {declared_total:.2f} | Diferença: R$ {diff:.2f}"
+            if abs(diff) < 0.05:
+                logger.info(f"{log_msg} | Status: RECONCILIAÇÃO PERFEITA ✅")
+            else:
+                logger.warning(
+                    f"{log_msg} | Status: DIVERGÊNCIA DETECTADA ⚠️ (Verificar encargos ou compras parceladas)"
+                )
+        else:
+            logger.info(log_msg)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Falha ao registrar reconciliação em log: %s", exc)
+
+    return parsed
 
 
 def refine_items_with_chat(
@@ -275,6 +313,7 @@ def refine_items_with_chat(
     categories: list[str],
     original_items: list[dict[str, Any]] | None = None,
     client: OpenAI | None = None,
+    model: str | None = None,
 ) -> tuple[list[dict[str, Any]], str]:
     """Refine, filter, or update items based on user natural language instructions.
 
@@ -313,8 +352,10 @@ def refine_items_with_chat(
         user_prompt_content += f"\nItens originais extraídos da fatura (referência para desfazer/restaurar):\n{orig_json}\n"
     user_prompt_content += f"\nInstrução do usuário:\n{user_message}"
 
+    model_to_use = model or settings.invoice_model or "gpt-4o"
+
     completion = client.beta.chat.completions.parse(
-        model="gpt-4o-mini",
+        model=model_to_use,
         messages=[
             {"role": "system", "content": system_prompt},
             {

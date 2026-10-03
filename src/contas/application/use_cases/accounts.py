@@ -17,6 +17,7 @@ from contas.schemas.account import (
     DeleteAccountResponse,
     ListAccountsInput,
     ListAccountsResponse,
+    UpdateAccountInput,
 )
 
 
@@ -25,11 +26,16 @@ class CreateAccountUseCase:
         self.account_repo = account_repo
 
     async def execute(self, payload: CreateAccountInput) -> dict[str, Any]:
+        # If user_id is not passed, use a default uuid or empty
+        account_user_id = payload.user_id or UUID(
+            "00000000-0000-0000-0000-000000000000"
+        )
         account = Account(
             name=payload.name,
             account_type=AccountType(payload.account_type),
             balance=Decimal(payload.initial_balance),
             currency=payload.currency,
+            user_id=account_user_id,
         )
         created = await self.account_repo.create(account)
         response = AccountResponse(
@@ -40,6 +46,7 @@ class CreateAccountUseCase:
             currency=created.currency,
             is_active=created.is_active,
             created_at=created.created_at,
+            user_id=created.user_id,
         )
         return response.model_dump(mode="json")
 
@@ -50,6 +57,7 @@ class ListAccountsUseCase:
 
     async def execute(self, payload: ListAccountsInput) -> dict[str, Any]:
         accounts = await self.account_repo.list_all(
+            user_id=payload.user_id,
             only_active=not payload.include_inactive,
             limit=1000,
         )
@@ -64,6 +72,7 @@ class ListAccountsUseCase:
                 balance=f"{acc.balance:.2f}",
                 currency=acc.currency,
                 is_active=acc.is_active,
+                user_id=acc.user_id,
             )
             for acc in accounts
         ]
@@ -120,3 +129,32 @@ class BulkDeleteAccountsUseCase:
         self, account_ids: list[UUID], force_cascade: bool = False
     ) -> int:
         return await self.account_repo.bulk_delete(account_ids, cascade=force_cascade)
+
+
+class UpdateAccountUseCase:
+    def __init__(self, account_repo: IAccountRepository) -> None:
+        self.account_repo = account_repo
+
+    async def execute(self, payload: UpdateAccountInput) -> dict[str, Any]:
+        account = await self.account_repo.get_by_id(
+            payload.account_id, only_active=False
+        )
+        if not account:
+            raise AccountNotFoundError(str(payload.account_id))
+
+        if payload.name is not None:
+            account.name = payload.name
+        if payload.is_active is not None:
+            account.is_active = payload.is_active
+
+        updated = await self.account_repo.update(account)
+        response = AccountResponse(
+            id=updated.id,
+            name=updated.name,
+            account_type=updated.account_type,
+            balance=f"{updated.balance:.2f}",
+            currency=updated.currency,
+            is_active=updated.is_active,
+            created_at=updated.created_at,
+        )
+        return response.model_dump(mode="json")

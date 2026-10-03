@@ -1,10 +1,12 @@
 import asyncio
 from uuid import UUID
 
+from contas.application.container import get_container
 from contas.schemas.account import (
     CreateAccountInput,
     DeleteAccountInput,
     ListAccountsInput,
+    UpdateAccountInput,
 )
 from contas.schemas.budget import GetBudgetStatusInput, SetBudgetInput
 from contas.schemas.category import CreateCategoryInput, ListCategoriesInput
@@ -43,15 +45,107 @@ def run_async(coro):
 
 class UIService:
     @staticmethod
-    def list_accounts(include_inactive: bool = False) -> dict:
-        server = get_mcp_server()
-        handler = server._tool_manager._tools["list_accounts"].fn
+    def register_user(name: str, email: str, username: str, password: str) -> dict:
+        container = get_container()
+        from contas.schemas.user import RegisterUserInput
+
         return run_async(
-            handler(payload=ListAccountsInput(include_inactive=include_inactive))
+            container.register_user_uc.execute(
+                RegisterUserInput(
+                    name=name, email=email, username=username, password=password
+                )
+            )
         )
 
     @staticmethod
-    def create_account(name: str, account_type: str, initial_balance: str) -> dict:
+    def authenticate_user(identifier: str, password: str) -> dict:
+        container = get_container()
+        from contas.schemas.user import AuthenticateUserInput
+
+        return run_async(
+            container.authenticate_user_uc.execute(
+                AuthenticateUserInput(identifier=identifier, password=password)
+            )
+        )
+
+    @staticmethod
+    def google_oauth(
+        google_id: str, email: str, name: str, avatar_url: str | None = None
+    ) -> dict:
+        container = get_container()
+        from contas.schemas.user import GoogleAuthInput
+
+        return run_async(
+            container.google_oauth_uc.execute(
+                GoogleAuthInput(
+                    google_id=google_id, email=email, name=name, avatar_url=avatar_url
+                )
+            )
+        )
+
+    @staticmethod
+    def approve_user(user_id: str, approve: bool = True) -> dict:
+        container = get_container()
+        from contas.schemas.user import ApproveUserInput
+
+        return run_async(
+            container.approve_user_uc.execute(
+                ApproveUserInput(user_id=user_id, approve=approve)
+            )
+        )
+
+    @staticmethod
+    def list_users() -> list[dict]:
+        container = get_container()
+        return run_async(container.list_users_uc.execute())
+
+    @staticmethod
+    def change_password(user_id: str, current_password: str, new_password: str) -> dict:
+        container = get_container()
+        from contas.schemas.user import ChangePasswordInput
+
+        return run_async(
+            container.change_password_uc.execute(
+                ChangePasswordInput(
+                    user_id=user_id,
+                    current_password=current_password,
+                    new_password=new_password,
+                )
+            )
+        )
+
+    @staticmethod
+    def admin_reset_password(target_user_id: str, new_password: str) -> dict:
+        container = get_container()
+        from contas.schemas.user import AdminResetPasswordInput
+
+        return run_async(
+            container.admin_reset_password_uc.execute(
+                AdminResetPasswordInput(
+                    target_user_id=target_user_id,
+                    new_password=new_password,
+                )
+            )
+        )
+
+    @staticmethod
+    def list_accounts(
+        include_inactive: bool = False, user_id: UUID | None = None
+    ) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["list_accounts"].fn
+        return run_async(
+            handler(
+                payload=ListAccountsInput(
+                    include_inactive=include_inactive, user_id=user_id
+                )
+            )
+        )
+
+    @staticmethod
+    def create_account(
+        name: str, account_type: str, initial_balance: str, user_id: UUID | None = None
+    ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["create_account"].fn
         return run_async(
@@ -60,6 +154,23 @@ class UIService:
                     name=name,
                     account_type=account_type,
                     initial_balance=initial_balance,
+                    user_id=user_id,
+                )
+            )
+        )
+
+    @staticmethod
+    def update_account(
+        account_id: UUID, name: str | None = None, is_active: bool | None = None
+    ) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["update_account"].fn
+        return run_async(
+            handler(
+                payload=UpdateAccountInput(
+                    account_id=account_id,
+                    name=name,
+                    is_active=is_active,
                 )
             )
         )
@@ -79,7 +190,9 @@ class UIService:
 
     @staticmethod
     def list_categories(
-        category_type: str | None = None, include_inactive: bool = False
+        category_type: str | None = None,
+        include_inactive: bool = False,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["list_categories"].fn
@@ -88,12 +201,15 @@ class UIService:
                 payload=ListCategoriesInput(
                     category_type=category_type,
                     include_inactive=include_inactive,
+                    user_id=user_id,
                 )
             )
         )
 
     @staticmethod
-    def create_category(name: str, category_type: str) -> dict:
+    def create_category(
+        name: str, category_type: str, user_id: UUID | None = None
+    ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["create_category"].fn
         return run_async(
@@ -101,6 +217,7 @@ class UIService:
                 payload=CreateCategoryInput(
                     name=name,
                     category_type=category_type,
+                    user_id=user_id,
                 )
             )
         )
@@ -114,6 +231,7 @@ class UIService:
         limit: int = 500,
         date_type: str = "transaction_date",
         search: str | None = None,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_statement"].fn
@@ -127,6 +245,7 @@ class UIService:
                     limit=limit,
                     date_type=date_type,
                     search=search,
+                    user_id=user_id,
                 )
             )
         )
@@ -145,6 +264,7 @@ class UIService:
         total_installments: int | None = None,
         installment_number: int | None = None,
         total_amount: str | None = None,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["record_transaction"].fn
@@ -163,6 +283,7 @@ class UIService:
                     total_installments=total_installments,
                     installment_number=installment_number,
                     total_amount=total_amount,
+                    user_id=user_id,
                 )
             )
         )
@@ -172,6 +293,7 @@ class UIService:
         month: int | None = None,
         year: int | None = None,
         reference_date: str | None = None,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_financial_summary"].fn
@@ -181,6 +303,7 @@ class UIService:
                     month=month,
                     year=year,
                     reference_date=reference_date,
+                    user_id=user_id,
                 )
             )
         )
@@ -190,6 +313,7 @@ class UIService:
         month: int | None = None,
         year: int | None = None,
         category_id: UUID | None = None,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_budget_status"].fn
@@ -199,12 +323,19 @@ class UIService:
                     month=month,
                     year=year,
                     category_id=category_id,
+                    user_id=user_id,
                 )
             )
         )
 
     @staticmethod
-    def set_budget(category_id: UUID, amount: str, month: int, year: int) -> dict:
+    def set_budget(
+        category_id: UUID,
+        amount: str,
+        month: int,
+        year: int,
+        user_id: UUID | None = None,
+    ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["set_budget"].fn
         return run_async(
@@ -214,6 +345,7 @@ class UIService:
                     amount=amount,
                     month=month,
                     year=year,
+                    user_id=user_id,
                 )
             )
         )

@@ -46,19 +46,45 @@ def run_app():
 
 
 def main():
+    # -------------------------------------------------------------
+    # INTERCEPTOR DE AUTENTICAÇÃO
+    # -------------------------------------------------------------
+    from contas.ui.views.auth import render_auth_view
+
+    current_user = st.session_state.get("user")
+    if not current_user or not st.session_state.get("authenticated"):
+        render_auth_view()
+        return
+
+    current_user_id = UUID(current_user["id"])
+    user_role = current_user.get("role", "user")
+
+    # Sidebar com dados do usuário logado
+    st.sidebar.markdown(f"### 👤 {current_user['name']}")
+    role_badge = "👑 Administrador" if user_role == "admin" else "👤 Usuário"
+    st.sidebar.caption(f"{role_badge} • @{current_user['username']}")
+    if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
+        st.session_state.clear()
+        st.rerun()
+
+    st.sidebar.divider()
     st.sidebar.title("💰 Contas")
     st.sidebar.caption("Gestão Financeira Residencial Inteligente")
 
+    nav_options = [
+        "📊 Dashboard & Extrato",
+        "➕ Novo Lançamento",
+        "🧾 Importar Fatura PDF",
+        "💬 Assistente Financeiro",
+        "🎯 Orçamentos & Metas",
+        "⚙️ Configurações",
+    ]
+    if user_role == "admin":
+        nav_options.append("👥 Gerenciamento de Usuários")
+
     menu = st.sidebar.radio(
         "Navegação",
-        [
-            "📊 Dashboard & Extrato",
-            "➕ Novo Lançamento",
-            "🧾 Importar Fatura PDF",
-            "💬 Assistente Financeiro",
-            "🎯 Orçamentos & Metas",
-            "⚙️ Configurações",
-        ],
+        nav_options,
         index=0,
     )
 
@@ -69,7 +95,7 @@ def main():
         st.title("📊 Visão Geral das Finanças")
 
         # Carregar Contas
-        accounts_data = UIService.list_accounts()
+        accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
         total_balance = sum(float(a["balance"]) for a in accounts)
 
@@ -141,6 +167,7 @@ def main():
                     end_date=end_date.isoformat(),
                     include_pending=include_pending,
                     date_type=date_type_val,
+                    user_id=current_user_id,
                 )
 
                 txs = statement.get("transactions", [])
@@ -368,13 +395,13 @@ def main():
     elif menu == "➕ Novo Lançamento":
         st.title("➕ Registrar Transação")
 
-        accounts_data = UIService.list_accounts()
+        accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
 
         if not accounts:
             st.warning("Cadastre uma conta antes de realizar lançamentos.")
         else:
-            categories_data = UIService.list_categories()
+            categories_data = UIService.list_categories(user_id=current_user_id)
             categories = categories_data.get("categories", [])
 
             # Seleções fora do form para permitir lógica condicional
@@ -498,6 +525,7 @@ def main():
                             due_date=f"{data_venc.isoformat()}T12:00:00Z",
                             total_installments=qtd_parcelas if is_parcelada else None,
                             total_amount=valor if is_parcelada else None,
+                            user_id=current_user_id,
                         )
 
                         if "error" in res:
@@ -525,9 +553,11 @@ def main():
             "Carregue sua fatura em PDF, use o chat interativo para filtrar despesas com IA e importe os lançamentos com um clique."
         )
 
-        accounts_data = UIService.list_accounts()
+        accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
-        categories_data = UIService.list_categories(category_type="expense")
+        categories_data = UIService.list_categories(
+            category_type="expense", user_id=current_user_id
+        )
         categories = categories_data.get("categories", [])
         category_names = [c["name"] for c in categories]
 
@@ -535,7 +565,7 @@ def main():
             st.warning("Cadastre uma conta antes de importar faturas.")
             st.stop()
 
-        col_cfg1, col_cfg2 = st.columns([1, 1])
+        col_cfg1, col_cfg2, col_cfg3 = st.columns([1.2, 1.2, 1.6])
         with col_cfg1:
             selected_acc_name = st.selectbox(
                 "Conta de Destino das Despesas",
@@ -543,6 +573,14 @@ def main():
             )
             chosen_account = next(a for a in accounts if a["name"] == selected_acc_name)
         with col_cfg2:
+            model_options = ["o3-mini", "gpt-4o", "gpt-4o-mini"]
+            selected_model = st.selectbox(
+                "🤖 Modelo de IA (OpenAI)",
+                options=model_options,
+                index=0,
+                help="o3-mini: Modelo de raciocínio profundo, excelente para reconciliação contábil (padrão)\ngpt-4o: Multimodal rápido e robusto\ngpt-4o-mini: Econômico e ágil",
+            )
+        with col_cfg3:
             pdf_file = st.file_uploader(
                 "Selecione o arquivo PDF da fatura", type=["pdf"]
             )
@@ -579,14 +617,18 @@ def main():
 
         # Só processa se não for criptografado OU se a senha tiver sido preenchida
         can_process = pdf_file is not None and (not is_encrypted or bool(pdf_password))
-        process_key = f"{pdf_file.name}:{pdf_password}" if pdf_file else None
+        process_key = (
+            f"{pdf_file.name}:{pdf_password}:{selected_model}" if pdf_file else None
+        )
 
         if can_process and st.session_state["last_processed_file"] != process_key:
-            with st.spinner("Lendo arquivo PDF e extraindo compras com OpenAI..."):
+            with st.spinner(
+                f"Lendo arquivo PDF e extraindo compras com OpenAI ({selected_model})..."
+            ):
                 try:
                     raw_text = extract_text_from_pdf(pdf_bytes, password=pdf_password)
                     parsed_container = parse_invoice_with_openai(
-                        raw_text, categories=category_names
+                        raw_text, categories=category_names, model=selected_model
                     )
                     items_dicts = [item.model_dump() for item in parsed_container.items]
                     st.session_state["invoice_items"] = items_dicts
@@ -600,11 +642,11 @@ def main():
                     st.session_state["chat_history"] = [
                         {
                             "role": "assistant",
-                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), marcar para importar, desfazer filtros (*'desfaça os filtros'*) ou tirar dúvidas.",
+                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura usando o modelo **{selected_model}**! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), marcar para importar, desfazer filtros (*'desfaça os filtros'*) ou tirar dúvidas.",
                         }
                     ]
                     st.success(
-                        f"Fatura processada com sucesso! {len(items_dicts)} despesas encontradas."
+                        f"Fatura processada com sucesso via {selected_model}! {len(items_dicts)} despesas encontradas."
                     )
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"Erro ao processar fatura: {exc}")
@@ -622,7 +664,7 @@ def main():
             # Seção de Chat Interativo
             st.subheader("💬 Chat Interativo de Refinamento e Filtro")
             st.caption(
-                "Converse com a IA para ajustar a lista antes de efetivar os lançamentos."
+                f"Converse com a IA ({selected_model}) para ajustar a lista antes de efetivar os lançamentos."
             )
 
             for msg in st.session_state["chat_history"]:
@@ -636,7 +678,7 @@ def main():
                 st.session_state["chat_history"].append(
                     {"role": "user", "content": user_query}
                 )
-                with st.spinner("Processando solicitação com IA..."):
+                with st.spinner(f"Processando solicitação com {selected_model}..."):
                     try:
                         updated_items, reply = refine_items_with_chat(
                             current_items=st.session_state["invoice_items"],
@@ -645,6 +687,7 @@ def main():
                             original_items=st.session_state.get(
                                 "invoice_items_original", []
                             ),
+                            model=selected_model,
                         )
                         st.session_state["invoice_items"] = updated_items
                         st.session_state["chat_history"].append(
@@ -929,6 +972,7 @@ def main():
                                     status=status_to_save.value,
                                     total_installments=tot_inst,
                                     installment_number=cur_inst,
+                                    user_id=current_user_id,
                                 )
                                 if "error" in res:
                                     errors.append(
@@ -1158,7 +1202,9 @@ def main():
         with col_y:
             ano = st.number_input("Ano", min_value=2020, max_value=2030, value=now.year)
 
-        status_data = UIService.get_budget_status(month=mes, year=ano)
+        status_data = UIService.get_budget_status(
+            month=mes, year=ano, user_id=current_user_id
+        )
         summary = status_data.get("summary", {})
         budgets = status_data.get("budgets", [])
 
@@ -1201,7 +1247,9 @@ def main():
 
         # Formulário para Definir/Atualizar Orçamento
         st.subheader("➕ Definir ou Atualizar Orçamento")
-        categories_data = UIService.list_categories(category_type="expense")
+        categories_data = UIService.list_categories(
+            category_type="expense", user_id=current_user_id
+        )
         expense_cats = categories_data.get("categories", [])
 
         if expense_cats:
@@ -1220,6 +1268,7 @@ def main():
                             amount=b_val,
                             month=mes,
                             year=ano,
+                            user_id=current_user_id,
                         )
                         if "error" in res:
                             st.error(f"Erro: {res['error']['message']}")
@@ -1260,7 +1309,9 @@ def main():
                 )
                 acc_init = st.text_input("Saldo Inicial (R$)", value="0.00")
                 if st.form_submit_button("Criar Conta"):
-                    res = UIService.create_account(acc_name, acc_type, acc_init)
+                    res = UIService.create_account(
+                        acc_name, acc_type, acc_init, user_id=current_user_id
+                    )
                     if "error" in res:
                         st.error(f"Erro: {res['error']['message']}")
                     else:
@@ -1275,7 +1326,9 @@ def main():
                     "Tipo", [CategoryType.EXPENSE, CategoryType.INCOME]
                 )
                 if st.form_submit_button("Criar Categoria"):
-                    res = UIService.create_category(cat_name, cat_type)
+                    res = UIService.create_category(
+                        cat_name, cat_type, user_id=current_user_id
+                    )
                     if "error" in res:
                         st.error(f"Erro: {res['error']['message']}")
                     else:
@@ -1284,11 +1337,64 @@ def main():
 
         st.divider()
 
-        # Gerenciamento e Exclusão de Contas (Individual e em Lote)
-        st.subheader("🗑️ Gerenciar e Excluir Contas (em Lote)")
-        accounts_data = UIService.list_accounts(include_inactive=True)
+        # Edição de Nome de Conta
+        st.subheader("✏️ Editar Nome da Conta")
+        accounts_data = UIService.list_accounts(
+            include_inactive=True, user_id=current_user_id
+        )
         all_accounts = accounts_data.get("accounts", [])
 
+        if not all_accounts:
+            st.info("Nenhuma conta cadastrada.")
+        else:
+            with st.container(border=True):
+                col_sel_edit, col_name_edit, col_btn_edit = st.columns([2, 2, 1])
+                acc_options = {
+                    f"{a['name']} ({a['account_type'].upper()})": a
+                    for a in all_accounts
+                }
+                with col_sel_edit:
+                    selected_acc_label = st.selectbox(
+                        "Selecione a Conta",
+                        list(acc_options.keys()),
+                        key="select_acc_to_edit",
+                    )
+                target_acc = acc_options[selected_acc_label]
+                with col_name_edit:
+                    new_acc_name = st.text_input(
+                        "Novo Nome",
+                        value=target_acc["name"],
+                        key=f"input_edit_acc_name_{target_acc['id']}",
+                    )
+                with col_btn_edit:
+                    st.write("")
+                    st.write("")
+                    if st.button(
+                        "Salvar Nome", type="primary", key="btn_save_acc_name"
+                    ):
+                        if not new_acc_name or not new_acc_name.strip():
+                            st.error("O nome da conta não pode ser vazio.")
+                        elif new_acc_name.strip() == target_acc["name"]:
+                            st.info("Nenhuma alteração no nome.")
+                        else:
+                            res = UIService.update_account(
+                                account_id=UUID(target_acc["id"]),
+                                name=new_acc_name.strip(),
+                            )
+                            if "error" in res:
+                                st.error(
+                                    f"Erro: {res['error'].get('message', res['error'])}"
+                                )
+                            else:
+                                st.success(
+                                    f"Conta renomeada para '{new_acc_name.strip()}' com sucesso!"
+                                )
+                                st.rerun()
+
+        st.divider()
+
+        # Gerenciamento e Exclusão de Contas (Individual e em Lote)
+        st.subheader("🗑️ Gerenciar e Excluir Contas (em Lote)")
         if not all_accounts:
             st.info("Nenhuma conta cadastrada.")
         else:
@@ -1406,6 +1512,159 @@ def main():
 
                     st.session_state[accounts_select_key] = False
                     st.rerun()
+
+        st.divider()
+
+        # Segurança & Troca de Senha
+        st.subheader("🔒 Alterar Minha Senha")
+        with st.container(border=True):
+            st.caption(
+                "Atualize sua senha de acesso. A nova senha deve ter no mínimo 6 caracteres."
+            )
+            with st.form("form_change_password"):
+                col_p1, col_p2, col_p3 = st.columns(3)
+                with col_p1:
+                    pwd_current = st.text_input("Senha Atual", type="password")
+                with col_p2:
+                    pwd_new = st.text_input("Nova Senha", type="password")
+                with col_p3:
+                    pwd_new2 = st.text_input("Confirme a Nova Senha", type="password")
+
+                btn_change_pwd = st.form_submit_button(
+                    "Atualizar Senha", type="primary"
+                )
+
+            if btn_change_pwd:
+                if not pwd_current.strip() or not pwd_new.strip():
+                    st.error("Preencha a senha atual e a nova senha.")
+                elif pwd_new != pwd_new2:
+                    st.error("A confirmação da senha não confere.")
+                elif len(pwd_new) < 6:
+                    st.error("A nova senha deve ter no mínimo 6 caracteres.")
+                else:
+                    try:
+                        UIService.change_password(
+                            user_id=str(current_user_id),
+                            current_password=pwd_current,
+                            new_password=pwd_new,
+                        )
+                        st.success("✅ Senha alterada com sucesso!")
+                    except Exception as exc:  # noqa: BLE001
+                        st.error(f"❌ Não foi possível alterar a senha: {exc}")
+
+    # -------------------------------------------------------------
+    # 7. GERENCIAMENTO DE USUÁRIOS (ADMIN)
+    # -------------------------------------------------------------
+    elif menu == "👥 Gerenciamento de Usuários":
+        st.title("👥 Gerenciamento e Aprovação de Usuários")
+        st.caption(
+            "Apenas administradores podem aprovar o acesso de novos usuários ao sistema."
+        )
+
+        users = UIService.list_users()
+
+        pending_users = [u for u in users if not u.get("is_approved")]
+        approved_users = [u for u in users if u.get("is_approved")]
+
+        # Seção de Cadastros Pendentes
+        st.subheader(f"⏳ Cadastros Aguardando Aprovação ({len(pending_users)})")
+        if not pending_users:
+            st.success("Nenhum usuário aguardando aprovação no momento.")
+        else:
+            for pu in pending_users:
+                with st.container(border=True):
+                    col_info, col_actions = st.columns([3, 1.5])
+                    with col_info:
+                        st.markdown(f"**{pu['name']}** (@{pu['username']})")
+                        st.caption(
+                            f"E-mail: `{pu['email']}` • Provedor: `{pu['auth_provider']}` • Cadastro: {pu['created_at'][:10]}"
+                        )
+                    with col_actions:
+                        col_btn1, col_btn2 = st.columns(2)
+                        with col_btn1:
+                            if st.button(
+                                "✅ Aprovar",
+                                key=f"btn_approve_{pu['id']}",
+                                type="primary",
+                            ):
+                                res = UIService.approve_user(
+                                    user_id=pu["id"], approve=True
+                                )
+                                st.success(f"Usuário '{pu['name']}' aprovado!")
+                                st.rerun()
+                        with col_btn2:
+                            if st.button("❌ Rejeitar", key=f"btn_reject_{pu['id']}"):
+                                res = UIService.approve_user(
+                                    user_id=pu["id"], approve=False
+                                )
+                                st.info(f"Usuário '{pu['name']}' mantido bloqueado.")
+                                st.rerun()
+
+        st.divider()
+
+        # Seção de Usuários Ativos / Aprovados
+        st.subheader(f"✅ Usuários Aprovados ({len(approved_users)})")
+        if approved_users:
+            users_df = pd.DataFrame(
+                [
+                    {
+                        "ID": u["id"],
+                        "Nome": u["name"],
+                        "Login": u["username"],
+                        "E-mail": u["email"],
+                        "Perfil": u.get("role", "user").upper(),
+                        "Provedor": u.get("auth_provider", "local").upper(),
+                        "Ativo": "Sim" if u.get("is_active") else "Não",
+                    }
+                    for u in approved_users
+                ]
+            )
+            st.dataframe(users_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # Redefinição de Senha de Usuário pelo Administrador
+        st.subheader("🔑 Redefinir Senha de Usuário (Admin)")
+        with st.container(border=True):
+            user_options = {
+                f"{u['name']} (@{u['username']} - {u['email']})": u["id"]
+                for u in approved_users
+            }
+            if user_options:
+                col_sel_u, col_new_p, col_btn_p = st.columns([2, 1.5, 1])
+                with col_sel_u:
+                    sel_user_label = st.selectbox(
+                        "Selecione o Usuário",
+                        list(user_options.keys()),
+                        key="select_user_reset_pwd",
+                    )
+                with col_new_p:
+                    admin_new_pwd = st.text_input(
+                        "Nova Senha Provisória",
+                        type="password",
+                        key="input_admin_reset_pwd",
+                    )
+                with col_btn_p:
+                    st.write("")
+                    st.write("")
+                    if st.button(
+                        "Redefinir Senha", type="primary", key="btn_admin_reset_pwd"
+                    ):
+                        if len(admin_new_pwd) < 6:
+                            st.error("A senha deve ter no mínimo 6 caracteres.")
+                        else:
+                            target_uid = user_options[sel_user_label]
+                            try:
+                                res = UIService.admin_reset_password(
+                                    target_uid, admin_new_pwd
+                                )
+                                st.success(
+                                    res.get("message", "Senha redefinida com sucesso!")
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                st.error(f"Erro ao redefinir: {exc}")
+            else:
+                st.info("Nenhum usuário aprovado cadastrado.")
 
 
 if __name__ == "__main__":

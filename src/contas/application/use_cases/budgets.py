@@ -32,7 +32,7 @@ class SetBudgetUseCase:
 
     async def execute(self, payload: SetBudgetInput) -> dict[str, Any]:
         category = await self.category_repo.get_by_id(
-            payload.category_id, only_active=True
+            payload.category_id, user_id=payload.user_id, only_active=True
         )
         if not category:
             raise CategoryNotFoundError(str(payload.category_id))
@@ -43,7 +43,9 @@ class SetBudgetUseCase:
             )
 
         budget_amount = Decimal(payload.amount)
+        budget_user_id = payload.user_id or category.user_id
         budget = Budget(
+            user_id=budget_user_id,
             category_id=payload.category_id,
             amount=budget_amount,
             month=payload.month,
@@ -58,6 +60,7 @@ class SetBudgetUseCase:
             month=saved.month,
             year=saved.year,
             created_at=saved.created_at,
+            user_id=saved.user_id,
         )
         return response.model_dump(mode="json")
 
@@ -95,6 +98,8 @@ class GetBudgetStatusUseCase:
                 ORMBudget.month == target_month,
                 ORMBudget.year == target_year,
             )
+            if payload.user_id is not None:
+                budget_query = budget_query.where(ORMBudget.user_id == payload.user_id)
             if payload.category_id is not None:
                 budget_query = budget_query.where(
                     ORMBudget.category_id == payload.category_id
@@ -105,11 +110,10 @@ class GetBudgetStatusUseCase:
             cat_ids = [b.category_id for b in budgets]
             categories_map: dict = {}
             if cat_ids:
-                cats = (
-                    await session.exec(
-                        select(ORMCategory).where(ORMCategory.id.in_(cat_ids))
-                    )
-                ).all()
+                cat_query = select(ORMCategory).where(ORMCategory.id.in_(cat_ids))
+                if payload.user_id is not None:
+                    cat_query = cat_query.where(ORMCategory.user_id == payload.user_id)
+                cats = (await session.exec(cat_query)).all()
                 categories_map = {c.id: c for c in cats}
 
             tx_query = select(ORMTransaction).where(
@@ -118,6 +122,8 @@ class GetBudgetStatusUseCase:
                 ORMTransaction.transaction_date >= start_date,
                 ORMTransaction.transaction_date <= end_date,
             )
+            if payload.user_id is not None:
+                tx_query = tx_query.where(ORMTransaction.user_id == payload.user_id)
             if payload.category_id is not None:
                 tx_query = tx_query.where(
                     ORMTransaction.category_id == payload.category_id

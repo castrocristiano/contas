@@ -29,6 +29,10 @@ class SetBudgetInput(BaseModel):
         le=2100,
         description="Year (e.g., 2026)",
     )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Owner user ID",
+    )
 
     @field_validator("amount")
     @classmethod
@@ -49,6 +53,7 @@ class BudgetResponse(BaseModel):
     month: int
     year: int
     created_at: datetime
+    user_id: UUID | None = None
 
 
 class GetBudgetStatusInput(BaseModel):
@@ -69,6 +74,10 @@ class GetBudgetStatusInput(BaseModel):
     category_id: UUID | None = Field(
         default=None,
         description="Filter by specific category UUID. Optional.",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description="Filter by owner user ID.",
     )
 
 

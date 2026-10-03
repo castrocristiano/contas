@@ -18,9 +18,18 @@ class CategoryType(StrEnum):
 
 class Category(SQLModel, table=True):
     __tablename__ = "category"
+    __table_args__ = (
+        sa.UniqueConstraint("user_id", "name", name="uq_category_user_name"),
+    )
 
     id: uuid.UUID = Field(default_factory=uuid.uuid4, primary_key=True)
-    name: str = Field(unique=True, index=True, max_length=100, nullable=False)
+    user_id: uuid.UUID = Field(
+        foreign_key="user.id",
+        ondelete="CASCADE",
+        nullable=False,
+        index=True,
+    )
+    name: str = Field(index=True, max_length=100, nullable=False)
     category_type: CategoryType = Field(
         sa_column=Column(
             sa.Enum(CategoryType, name="category_type_enum", native_enum=True),
