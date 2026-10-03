@@ -535,7 +535,7 @@ def main():
             st.warning("Cadastre uma conta antes de importar faturas.")
             st.stop()
 
-        col_cfg1, col_cfg2 = st.columns([1, 1])
+        col_cfg1, col_cfg2, col_cfg3 = st.columns([1.2, 1.2, 1.6])
         with col_cfg1:
             selected_acc_name = st.selectbox(
                 "Conta de Destino das Despesas",
@@ -543,6 +543,14 @@ def main():
             )
             chosen_account = next(a for a in accounts if a["name"] == selected_acc_name)
         with col_cfg2:
+            model_options = ["gpt-4o", "o3-mini", "gpt-4o-mini"]
+            selected_model = st.selectbox(
+                "🤖 Modelo de IA (OpenAI)",
+                options=model_options,
+                index=0,
+                help="gpt-4o: Multimodal rápido e robusto (padrão)\no3-mini: Modelo de raciocínio profundo, excelente para reconciliação contábil\ngpt-4o-mini: Econômico e ágil",
+            )
+        with col_cfg3:
             pdf_file = st.file_uploader(
                 "Selecione o arquivo PDF da fatura", type=["pdf"]
             )
@@ -579,14 +587,18 @@ def main():
 
         # Só processa se não for criptografado OU se a senha tiver sido preenchida
         can_process = pdf_file is not None and (not is_encrypted or bool(pdf_password))
-        process_key = f"{pdf_file.name}:{pdf_password}" if pdf_file else None
+        process_key = (
+            f"{pdf_file.name}:{pdf_password}:{selected_model}" if pdf_file else None
+        )
 
         if can_process and st.session_state["last_processed_file"] != process_key:
-            with st.spinner("Lendo arquivo PDF e extraindo compras com OpenAI..."):
+            with st.spinner(
+                f"Lendo arquivo PDF e extraindo compras com OpenAI ({selected_model})..."
+            ):
                 try:
                     raw_text = extract_text_from_pdf(pdf_bytes, password=pdf_password)
                     parsed_container = parse_invoice_with_openai(
-                        raw_text, categories=category_names
+                        raw_text, categories=category_names, model=selected_model
                     )
                     items_dicts = [item.model_dump() for item in parsed_container.items]
                     st.session_state["invoice_items"] = items_dicts
@@ -600,11 +612,11 @@ def main():
                     st.session_state["chat_history"] = [
                         {
                             "role": "assistant",
-                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), marcar para importar, desfazer filtros (*'desfaça os filtros'*) ou tirar dúvidas.",
+                            "content": f"Encontrei **{len(items_dicts)} despesas** na fatura usando o modelo **{selected_model}**! Você pode me pedir para filtrar (ex: *'remova compras do iFood'* ou *'mantenha só gastos acima de R$ 50'*), marcar para importar, desfazer filtros (*'desfaça os filtros'*) ou tirar dúvidas.",
                         }
                     ]
                     st.success(
-                        f"Fatura processada com sucesso! {len(items_dicts)} despesas encontradas."
+                        f"Fatura processada com sucesso via {selected_model}! {len(items_dicts)} despesas encontradas."
                     )
                 except Exception as exc:  # noqa: BLE001
                     st.error(f"Erro ao processar fatura: {exc}")
@@ -622,7 +634,7 @@ def main():
             # Seção de Chat Interativo
             st.subheader("💬 Chat Interativo de Refinamento e Filtro")
             st.caption(
-                "Converse com a IA para ajustar a lista antes de efetivar os lançamentos."
+                f"Converse com a IA ({selected_model}) para ajustar a lista antes de efetivar os lançamentos."
             )
 
             for msg in st.session_state["chat_history"]:
@@ -636,7 +648,7 @@ def main():
                 st.session_state["chat_history"].append(
                     {"role": "user", "content": user_query}
                 )
-                with st.spinner("Processando solicitação com IA..."):
+                with st.spinner(f"Processando solicitação com {selected_model}..."):
                     try:
                         updated_items, reply = refine_items_with_chat(
                             current_items=st.session_state["invoice_items"],
@@ -645,6 +657,7 @@ def main():
                             original_items=st.session_state.get(
                                 "invoice_items_original", []
                             ),
+                            model=selected_model,
                         )
                         st.session_state["invoice_items"] = updated_items
                         st.session_state["chat_history"].append(
