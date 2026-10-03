@@ -701,7 +701,7 @@ def main():
             if invoice_select_key not in st.session_state:
                 st.session_state[invoice_select_key] = True
 
-            inv_col1, inv_col2, _ = st.columns([1, 1, 4])
+            inv_col1, inv_col2, inv_col3, _ = st.columns([1.2, 1.2, 2, 2])
             with inv_col1:
                 if st.button("☑️ Selecionar Tudo", key="btn_invoice_select_all"):
                     st.session_state[invoice_select_key] = True
@@ -714,6 +714,13 @@ def main():
                     st.session_state[invoice_select_key] = False
                     for item in items:
                         item["selected_for_import"] = False
+                    st.session_state.pop("editor_invoice_items", None)
+                    st.rerun()
+            with inv_col3:
+                if st.button("🎯 Apenas Fatura Atual (Sem Futuras)", key="btn_invoice_select_current_only"):
+                    st.session_state[invoice_select_key] = True
+                    for item in items:
+                        item["selected_for_import"] = not bool(item.get("is_future", False))
                     st.session_state.pop("editor_invoice_items", None)
                     st.rerun()
 
