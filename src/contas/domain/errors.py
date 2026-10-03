@@ -132,4 +132,12 @@ class AccountPendingApprovalError(DomainError):
         )
 
 
+class InvalidCurrentPasswordError(DomainError):
+    def __init__(self) -> None:
+        super().__init__(
+            code="INVALID_CURRENT_PASSWORD",
+            message="A senha atual informada está incorreta.",
+        )
+
+
 ContasError = DomainError

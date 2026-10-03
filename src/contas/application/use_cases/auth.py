@@ -5,12 +5,15 @@ from contas.domain.entities import User
 from contas.domain.errors import (
     AccountPendingApprovalError,
     InvalidCredentialsError,
+    InvalidCurrentPasswordError,
     UserAlreadyExistsError,
     UserNotFoundError,
 )
 from contas.schemas.user import (
+    AdminResetPasswordInput,
     ApproveUserInput,
     AuthenticateUserInput,
+    ChangePasswordInput,
     GoogleAuthInput,
     RegisterUserInput,
 )
@@ -184,3 +187,51 @@ class ListUsersUseCase:
             }
             for u in users
         ]
+
+
+class ChangePasswordUseCase:
+    def __init__(self, user_repo: IUserRepository):
+        self.user_repo = user_repo
+
+    async def execute(self, payload: ChangePasswordInput) -> dict:
+        user_uuid = UUID(payload.user_id)
+        user = await self.user_repo.get_by_id(user_uuid)
+        if not user:
+            raise UserNotFoundError(payload.user_id)
+
+        # If user already has a password, verify the current password
+        if user.password_hash and not verify_password(
+            payload.current_password, user.password_hash
+        ):
+            raise InvalidCurrentPasswordError()
+
+        if len(payload.new_password) < 6:
+            raise ValueError("A nova senha deve ter no mínimo 6 caracteres.")
+
+        user.password_hash = hash_password(payload.new_password)
+        await self.user_repo.update(user)
+        return {
+            "id": str(user.id),
+            "message": "Senha atualizada com sucesso.",
+        }
+
+
+class AdminResetPasswordUseCase:
+    def __init__(self, user_repo: IUserRepository):
+        self.user_repo = user_repo
+
+    async def execute(self, payload: AdminResetPasswordInput) -> dict:
+        user_uuid = UUID(payload.target_user_id)
+        user = await self.user_repo.get_by_id(user_uuid)
+        if not user:
+            raise UserNotFoundError(payload.target_user_id)
+
+        if len(payload.new_password) < 6:
+            raise ValueError("A nova senha deve ter no mínimo 6 caracteres.")
+
+        user.password_hash = hash_password(payload.new_password)
+        await self.user_repo.update(user)
+        return {
+            "id": str(user.id),
+            "message": f"Senha de {user.username} redefinida com sucesso pelo administrador.",
+        }

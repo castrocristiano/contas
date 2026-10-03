@@ -100,6 +100,35 @@ class UIService:
         return run_async(container.list_users_uc.execute())
 
     @staticmethod
+    def change_password(user_id: str, current_password: str, new_password: str) -> dict:
+        container = get_container()
+        from contas.schemas.user import ChangePasswordInput
+
+        return run_async(
+            container.change_password_uc.execute(
+                ChangePasswordInput(
+                    user_id=user_id,
+                    current_password=current_password,
+                    new_password=new_password,
+                )
+            )
+        )
+
+    @staticmethod
+    def admin_reset_password(target_user_id: str, new_password: str) -> dict:
+        container = get_container()
+        from contas.schemas.user import AdminResetPasswordInput
+
+        return run_async(
+            container.admin_reset_password_uc.execute(
+                AdminResetPasswordInput(
+                    target_user_id=target_user_id,
+                    new_password=new_password,
+                )
+            )
+        )
+
+    @staticmethod
     def list_accounts(
         include_inactive: bool = False, user_id: UUID | None = None
     ) -> dict:

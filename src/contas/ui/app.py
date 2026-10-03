@@ -1513,6 +1513,45 @@ def main():
                     st.session_state[accounts_select_key] = False
                     st.rerun()
 
+        st.divider()
+
+        # Segurança & Troca de Senha
+        st.subheader("🔒 Alterar Minha Senha")
+        with st.container(border=True):
+            st.caption(
+                "Atualize sua senha de acesso. A nova senha deve ter no mínimo 6 caracteres."
+            )
+            with st.form("form_change_password"):
+                col_p1, col_p2, col_p3 = st.columns(3)
+                with col_p1:
+                    pwd_current = st.text_input("Senha Atual", type="password")
+                with col_p2:
+                    pwd_new = st.text_input("Nova Senha", type="password")
+                with col_p3:
+                    pwd_new2 = st.text_input("Confirme a Nova Senha", type="password")
+
+                btn_change_pwd = st.form_submit_button(
+                    "Atualizar Senha", type="primary"
+                )
+
+            if btn_change_pwd:
+                if not pwd_current.strip() or not pwd_new.strip():
+                    st.error("Preencha a senha atual e a nova senha.")
+                elif pwd_new != pwd_new2:
+                    st.error("A confirmação da senha não confere.")
+                elif len(pwd_new) < 6:
+                    st.error("A nova senha deve ter no mínimo 6 caracteres.")
+                else:
+                    try:
+                        UIService.change_password(
+                            user_id=str(current_user_id),
+                            current_password=pwd_current,
+                            new_password=pwd_new,
+                        )
+                        st.success("✅ Senha alterada com sucesso!")
+                    except Exception as exc:  # noqa: BLE001
+                        st.error(f"❌ Não foi possível alterar a senha: {exc}")
+
     # -------------------------------------------------------------
     # 7. GERENCIAMENTO DE USUÁRIOS (ADMIN)
     # -------------------------------------------------------------
@@ -1581,6 +1620,51 @@ def main():
                 ]
             )
             st.dataframe(users_df, use_container_width=True, hide_index=True)
+
+        st.divider()
+
+        # Redefinição de Senha de Usuário pelo Administrador
+        st.subheader("🔑 Redefinir Senha de Usuário (Admin)")
+        with st.container(border=True):
+            user_options = {
+                f"{u['name']} (@{u['username']} - {u['email']})": u["id"]
+                for u in approved_users
+            }
+            if user_options:
+                col_sel_u, col_new_p, col_btn_p = st.columns([2, 1.5, 1])
+                with col_sel_u:
+                    sel_user_label = st.selectbox(
+                        "Selecione o Usuário",
+                        list(user_options.keys()),
+                        key="select_user_reset_pwd",
+                    )
+                with col_new_p:
+                    admin_new_pwd = st.text_input(
+                        "Nova Senha Provisória",
+                        type="password",
+                        key="input_admin_reset_pwd",
+                    )
+                with col_btn_p:
+                    st.write("")
+                    st.write("")
+                    if st.button(
+                        "Redefinir Senha", type="primary", key="btn_admin_reset_pwd"
+                    ):
+                        if len(admin_new_pwd) < 6:
+                            st.error("A senha deve ter no mínimo 6 caracteres.")
+                        else:
+                            target_uid = user_options[sel_user_label]
+                            try:
+                                res = UIService.admin_reset_password(
+                                    target_uid, admin_new_pwd
+                                )
+                                st.success(
+                                    res.get("message", "Senha redefinida com sucesso!")
+                                )
+                            except Exception as exc:  # noqa: BLE001
+                                st.error(f"Erro ao redefinir: {exc}")
+            else:
+                st.info("Nenhum usuário aprovado cadastrado.")
 
 
 if __name__ == "__main__":

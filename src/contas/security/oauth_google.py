@@ -39,3 +39,33 @@ class GoogleOAuthService:
             "state": state,
         }
         return f"{self.AUTH_URL}?{urllib.parse.urlencode(params)}"
+
+    def exchange_code_for_user_info(self, code: str) -> GoogleUserInfo:
+        """Exchanges an authorization code for user info from Google."""
+        import requests
+
+        token_data = {
+            "client_id": self.client_id,
+            "client_secret": self.client_secret,
+            "code": code,
+            "grant_type": "authorization_code",
+            "redirect_uri": self.redirect_uri,
+        }
+        token_resp = requests.post(self.TOKEN_URL, data=token_data, timeout=10)
+        token_resp.raise_for_status()
+        token_json = token_resp.json()
+        access_token = token_json.get("access_token")
+        if not access_token:
+            raise ValueError("Falha ao obter access_token do Google.")
+
+        headers = {"Authorization": f"Bearer {access_token}"}
+        userinfo_resp = requests.get(self.USERINFO_URL, headers=headers, timeout=10)
+        userinfo_resp.raise_for_status()
+        info = userinfo_resp.json()
+
+        return GoogleUserInfo(
+            google_id=info["sub"],
+            email=info["email"],
+            name=info.get("name") or info["email"].split("@")[0],
+            avatar_url=info.get("picture"),
+        )

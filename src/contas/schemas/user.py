@@ -23,3 +23,14 @@ class GoogleAuthInput(BaseModel):
 class ApproveUserInput(BaseModel):
     user_id: str
     approve: bool = True
+
+
+class ChangePasswordInput(BaseModel):
+    user_id: str
+    current_password: str = Field(min_length=1)
+    new_password: str = Field(min_length=6)
+
+
+class AdminResetPasswordInput(BaseModel):
+    target_user_id: str
+    new_password: str = Field(min_length=6)

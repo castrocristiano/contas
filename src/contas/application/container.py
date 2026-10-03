@@ -16,8 +16,10 @@ from contas.application.use_cases.accounts import (
     UpdateAccountUseCase,
 )
 from contas.application.use_cases.auth import (
+    AdminResetPasswordUseCase,
     ApproveUserUseCase,
     AuthenticateUserUseCase,
+    ChangePasswordUseCase,
     GoogleOAuthUseCase,
     ListUsersUseCase,
     RegisterUserUseCase,
@@ -60,6 +62,8 @@ class Container:
     google_oauth_uc: GoogleOAuthUseCase
     approve_user_uc: ApproveUserUseCase
     list_users_uc: ListUsersUseCase
+    change_password_uc: ChangePasswordUseCase
+    admin_reset_password_uc: AdminResetPasswordUseCase
 
     # Use Cases
     create_account_uc: CreateAccountUseCase
@@ -100,6 +104,8 @@ def get_container() -> Container:
         google_oauth_uc=GoogleOAuthUseCase(user_repo),
         approve_user_uc=ApproveUserUseCase(user_repo),
         list_users_uc=ListUsersUseCase(user_repo),
+        change_password_uc=ChangePasswordUseCase(user_repo),
+        admin_reset_password_uc=AdminResetPasswordUseCase(user_repo),
         create_account_uc=CreateAccountUseCase(account_repo),
         list_accounts_uc=ListAccountsUseCase(account_repo),
         update_account_uc=UpdateAccountUseCase(account_repo),
