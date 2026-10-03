@@ -91,3 +91,22 @@ class DeleteAccountResponse(BaseModel):
     name: str
     action_taken: str  # "deleted" | "deactivated"
     message: str
+
+
+class UpdateAccountInput(BaseModel):
+    model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
+
+    account_id: UUID = Field(
+        ...,
+        description="UUID of the account to update.",
+    )
+    name: str | None = Field(
+        default=None,
+        min_length=1,
+        max_length=100,
+        description="New display name of the account.",
+    )
+    is_active: bool | None = Field(
+        default=None,
+        description="Active status of the account.",
+    )

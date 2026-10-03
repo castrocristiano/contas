@@ -12,6 +12,7 @@ from contas.application.ports.repositories import (
 from contas.application.use_cases.accounts import (
     CreateAccountUseCase,
     ListAccountsUseCase,
+    UpdateAccountUseCase,
 )
 from contas.application.use_cases.transactions import (
     RecordTransactionUseCase,
@@ -27,6 +28,7 @@ from contas.domain.errors import (
 from contas.schemas.account import (
     CreateAccountInput,
     ListAccountsInput,
+    UpdateAccountInput,
 )
 from contas.schemas.transaction import (
     RecordTransactionInput,
@@ -479,3 +481,42 @@ async def test_get_statement_filter_by_date_type():
     assert len(res_due_date["transactions"]) == 1
     assert res_due_date["transactions"][0]["description"] == "Compra Setembro"
     assert "2026-10-10" in res_due_date["transactions"][0]["due_date"]
+
+
+@pytest.mark.anyio
+async def test_update_account_use_case_success():
+    repo = InMemoryAccountRepository()
+    acc = Account(
+        name="Nubank Antigo",
+        account_type=AccountType.CHECKING,
+        balance=Decimal("100.00"),
+    )
+    await repo.create(acc)
+
+    uc = UpdateAccountUseCase(repo)
+    updated = await uc.execute(
+        UpdateAccountInput(
+            account_id=acc.id,
+            name="Nubank Principal",
+        )
+    )
+
+    assert updated["id"] == str(acc.id)
+    assert updated["name"] == "Nubank Principal"
+    persisted = await repo.get_by_id(acc.id)
+    assert persisted is not None
+    assert persisted.name == "Nubank Principal"
+
+
+@pytest.mark.anyio
+async def test_update_account_use_case_not_found():
+    repo = InMemoryAccountRepository()
+    uc = UpdateAccountUseCase(repo)
+
+    with pytest.raises(AccountNotFoundError):
+        await uc.execute(
+            UpdateAccountInput(
+                account_id=uuid4(),
+                name="Inexistente",
+            )
+        )

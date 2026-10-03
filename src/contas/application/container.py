@@ -12,6 +12,7 @@ from contas.application.use_cases.accounts import (
     CreateAccountUseCase,
     DeleteAccountUseCase,
     ListAccountsUseCase,
+    UpdateAccountUseCase,
 )
 from contas.application.use_cases.budgets import (
     GetBudgetStatusUseCase,
@@ -46,6 +47,7 @@ class Container:
     # Use Cases
     create_account_uc: CreateAccountUseCase
     list_accounts_uc: ListAccountsUseCase
+    update_account_uc: UpdateAccountUseCase
     delete_account_uc: DeleteAccountUseCase
     bulk_delete_accounts_uc: BulkDeleteAccountsUseCase
 
@@ -76,6 +78,7 @@ def get_container() -> Container:
         budget_repo=budget_repo,
         create_account_uc=CreateAccountUseCase(account_repo),
         list_accounts_uc=ListAccountsUseCase(account_repo),
+        update_account_uc=UpdateAccountUseCase(account_repo),
         delete_account_uc=DeleteAccountUseCase(account_repo, transaction_repo),
         bulk_delete_accounts_uc=BulkDeleteAccountsUseCase(account_repo),
         create_category_uc=CreateCategoryUseCase(category_repo),

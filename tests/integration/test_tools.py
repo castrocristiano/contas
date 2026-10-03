@@ -7,7 +7,7 @@ from sqlmodel import select
 from contas.db.session import get_session
 from contas.models.account import Account, AccountType
 from contas.models.transaction import TransactionType
-from contas.schemas.account import CreateAccountInput
+from contas.schemas.account import CreateAccountInput, UpdateAccountInput
 from contas.schemas.transaction import RecordTransactionInput
 from contas.server import create_server
 
@@ -159,3 +159,43 @@ async def test_record_transaction_with_due_date_and_credit_card_statement_filter
     due_descs = [t["description"] for t in stmt_due_date["transactions"]]
     assert "Compra Outubro / Vence Novembro" in due_descs
     assert "Compra Novembro / Vence Dezembro" not in due_descs
+
+
+@pytest.mark.anyio
+async def test_update_account_tool_success(server):
+    create_handler = server._tool_manager._tools["create_account"].fn
+    update_handler = server._tool_manager._tools["update_account"].fn
+
+    acc = await create_handler(
+        payload=CreateAccountInput(
+            name="Conta Para Renomear",
+            account_type=AccountType.CHECKING,
+            initial_balance="150.00",
+        )
+    )
+    acc_id = acc["id"]
+
+    updated = await update_handler(
+        payload=UpdateAccountInput(
+            account_id=acc_id,
+            name="Conta Renomeada Com Sucesso",
+        )
+    )
+    assert "error" not in updated
+    assert updated["id"] == str(acc_id)
+    assert updated["name"] == "Conta Renomeada Com Sucesso"
+
+
+@pytest.mark.anyio
+async def test_update_account_tool_not_found(server):
+    update_handler = server._tool_manager._tools["update_account"].fn
+    fake_id = uuid4()
+
+    result = await update_handler(
+        payload=UpdateAccountInput(
+            account_id=fake_id,
+            name="Conta Fantasma",
+        )
+    )
+    assert "error" in result
+    assert result["error"]["code"] == "ACCOUNT_NOT_FOUND"

@@ -543,12 +543,12 @@ def main():
             )
             chosen_account = next(a for a in accounts if a["name"] == selected_acc_name)
         with col_cfg2:
-            model_options = ["gpt-4o", "o3-mini", "gpt-4o-mini"]
+            model_options = ["o3-mini", "gpt-4o", "gpt-4o-mini"]
             selected_model = st.selectbox(
                 "🤖 Modelo de IA (OpenAI)",
                 options=model_options,
                 index=0,
-                help="gpt-4o: Multimodal rápido e robusto (padrão)\no3-mini: Modelo de raciocínio profundo, excelente para reconciliação contábil\ngpt-4o-mini: Econômico e ágil",
+                help="o3-mini: Modelo de raciocínio profundo, excelente para reconciliação contábil (padrão)\ngpt-4o: Multimodal rápido e robusto\ngpt-4o-mini: Econômico e ágil",
             )
         with col_cfg3:
             pdf_file = st.file_uploader(
@@ -1297,11 +1297,62 @@ def main():
 
         st.divider()
 
-        # Gerenciamento e Exclusão de Contas (Individual e em Lote)
-        st.subheader("🗑️ Gerenciar e Excluir Contas (em Lote)")
+        # Edição de Nome de Conta
+        st.subheader("✏️ Editar Nome da Conta")
         accounts_data = UIService.list_accounts(include_inactive=True)
         all_accounts = accounts_data.get("accounts", [])
 
+        if not all_accounts:
+            st.info("Nenhuma conta cadastrada.")
+        else:
+            with st.container(border=True):
+                col_sel_edit, col_name_edit, col_btn_edit = st.columns([2, 2, 1])
+                acc_options = {
+                    f"{a['name']} ({a['account_type'].upper()})": a
+                    for a in all_accounts
+                }
+                with col_sel_edit:
+                    selected_acc_label = st.selectbox(
+                        "Selecione a Conta",
+                        list(acc_options.keys()),
+                        key="select_acc_to_edit",
+                    )
+                target_acc = acc_options[selected_acc_label]
+                with col_name_edit:
+                    new_acc_name = st.text_input(
+                        "Novo Nome",
+                        value=target_acc["name"],
+                        key=f"input_edit_acc_name_{target_acc['id']}",
+                    )
+                with col_btn_edit:
+                    st.write("")
+                    st.write("")
+                    if st.button(
+                        "Salvar Nome", type="primary", key="btn_save_acc_name"
+                    ):
+                        if not new_acc_name or not new_acc_name.strip():
+                            st.error("O nome da conta não pode ser vazio.")
+                        elif new_acc_name.strip() == target_acc["name"]:
+                            st.info("Nenhuma alteração no nome.")
+                        else:
+                            res = UIService.update_account(
+                                account_id=UUID(target_acc["id"]),
+                                name=new_acc_name.strip(),
+                            )
+                            if "error" in res:
+                                st.error(
+                                    f"Erro: {res['error'].get('message', res['error'])}"
+                                )
+                            else:
+                                st.success(
+                                    f"Conta renomeada para '{new_acc_name.strip()}' com sucesso!"
+                                )
+                                st.rerun()
+
+        st.divider()
+
+        # Gerenciamento e Exclusão de Contas (Individual e em Lote)
+        st.subheader("🗑️ Gerenciar e Excluir Contas (em Lote)")
         if not all_accounts:
             st.info("Nenhuma conta cadastrada.")
         else:

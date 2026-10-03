@@ -5,6 +5,7 @@ from contas.schemas.account import (
     CreateAccountInput,
     DeleteAccountInput,
     ListAccountsInput,
+    UpdateAccountInput,
 )
 from contas.schemas.budget import GetBudgetStatusInput, SetBudgetInput
 from contas.schemas.category import CreateCategoryInput, ListCategoriesInput
@@ -60,6 +61,22 @@ class UIService:
                     name=name,
                     account_type=account_type,
                     initial_balance=initial_balance,
+                )
+            )
+        )
+
+    @staticmethod
+    def update_account(
+        account_id: UUID, name: str | None = None, is_active: bool | None = None
+    ) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["update_account"].fn
+        return run_async(
+            handler(
+                payload=UpdateAccountInput(
+                    account_id=account_id,
+                    name=name,
+                    is_active=is_active,
                 )
             )
         )
