@@ -170,6 +170,11 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           BRANCH="${GITHUB_REF#refs/heads/}"
+          COMMITS_AHEAD=$(git log origin/develop..HEAD --oneline 2>/dev/null || git log develop..HEAD --oneline 2>/dev/null || true)
+          if [ -z "$COMMITS_AHEAD" ]; then
+            echo "Nenhum commit novo entre $BRANCH e develop. PR não necessário."
+            exit 0
+          fi
           EXISTING_PR=$(gh pr list --base develop --head "$BRANCH" --state open --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
             echo "Pull Request #$EXISTING_PR já existe de $BRANCH para develop."
@@ -179,7 +184,7 @@ jobs:
               --base develop \
               --head "$BRANCH" \
               --title "feat: $BRANCH" \
-              --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
+              --body $'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com `uv`\n- [x] Linter e validação de formatação com `ruff`\n- [x] Execução de testes unitários com `pytest`'
           fi
 
   # Abre PR de develop → main (após build e sonar bem-sucedidos)
@@ -198,6 +203,11 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          COMMITS_AHEAD=$(git log origin/main..HEAD --oneline 2>/dev/null || git log main..HEAD --oneline 2>/dev/null || true)
+          if [ -z "$COMMITS_AHEAD" ]; then
+            echo "Nenhum commit novo entre develop e main. PR não necessário."
+            exit 0
+          fi
           EXISTING_PR=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
             echo "Pull Request #$EXISTING_PR já existe de develop para main."
@@ -207,7 +217,7 @@ jobs:
               --base main \
               --head develop \
               --title "chore: merge develop into main" \
-              --body $'### Pull Request Automatizado\\n\\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\\n\\n#### Verificações Realizadas\\n- [x] Resolução de dependências com `uv`\\n- [x] Linter e validação de formatação com `ruff`\\n- [x] Execução de testes unitários com `pytest`'
+              --body $'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com `uv`\n- [x] Linter e validação de formatação com `ruff`\n- [x] Execução de testes unitários com `pytest`'
           fi
 
   # Cria Release no GitHub quando código for mergeado na branch main (após build & sonar com sucesso)
