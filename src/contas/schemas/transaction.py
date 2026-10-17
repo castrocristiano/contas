@@ -7,6 +7,8 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from contas.models.account import AccountType
 from contas.models.transaction import TransactionStatus, TransactionType
 
+_OWNER_USER_DESC = "Owner user ID"
+
 
 class SourceAccountSummary(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -74,7 +76,7 @@ class RecordTransactionInput(BaseModel):
     )
     user_id: UUID | None = Field(
         default=None,
-        description="Owner user ID",
+        description=_OWNER_USER_DESC,
     )
 
     @model_validator(mode="after")
@@ -335,7 +337,7 @@ class DeleteTransactionInput(BaseModel):
     )
     user_id: UUID | None = Field(
         default=None,
-        description="Owner user ID",
+        description=_OWNER_USER_DESC,
     )
 
 
@@ -345,4 +347,27 @@ class DeleteTransactionResponse(BaseModel):
     transaction_id: UUID
     deleted_count: int
     reverted_amount: str
+    message: str
+
+
+class ClearTransactionInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: UUID = Field(
+        ...,
+        description="UUID of the pending transaction to clear (settle).",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description=_OWNER_USER_DESC,
+    )
+
+
+class ClearTransactionResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    transaction_id: UUID
+    status: TransactionStatus
+    amount: str
+    source_account: SourceAccountSummary
     message: str

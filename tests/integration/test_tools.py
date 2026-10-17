@@ -199,3 +199,65 @@ async def test_update_account_tool_not_found(server):
     )
     assert "error" in result
     assert result["error"]["code"] == "ACCOUNT_NOT_FOUND"
+
+
+@pytest.mark.anyio
+async def test_clear_transaction_tool_and_ui_service(server):
+    from uuid import UUID
+
+    from contas.models.transaction import TransactionStatus
+    from contas.schemas.transaction import ClearTransactionInput
+    from contas.ui.services import UIService
+
+    create_acc_handler = server._tool_manager._tools["create_account"].fn
+    record_handler = server._tool_manager._tools["record_transaction"].fn
+    clear_handler = server._tool_manager._tools["clear_transaction"].fn
+
+    acc = await create_acc_handler(
+        payload=CreateAccountInput(
+            name="Cartão Fatura Pendente",
+            account_type=AccountType.CREDIT_CARD,
+            initial_balance="0.00",
+        )
+    )
+    acc_id = UUID(str(acc["id"]))
+
+    # 1. Record a pending expense via MCP tool and clear it via MCP tool
+    tx1 = await record_handler(
+        payload=RecordTransactionInput(
+            amount="120.00",
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=acc_id,
+            description="Despesa Fatura 1",
+            status=TransactionStatus.PENDING,
+        )
+    )
+    assert tx1["status"] == "pending"
+    assert tx1["source_account"]["new_balance"] == "0.00"
+
+    cleared1 = await clear_handler(
+        payload=ClearTransactionInput(transaction_id=UUID(str(tx1["id"])))
+    )
+    assert "error" not in cleared1
+    assert cleared1["status"] == "cleared"
+    assert cleared1["source_account"]["new_balance"] == "-120.00"
+
+    # 2. Record another pending expense and clear it via UIService
+    tx2 = await record_handler(
+        payload=RecordTransactionInput(
+            amount="80.00",
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=acc_id,
+            description="Despesa Fatura 2",
+            status=TransactionStatus.PENDING,
+        )
+    )
+    assert tx2["status"] == "pending"
+
+    cleared2 = UIService.clear_transaction(
+        transaction_id=UUID(str(tx2["id"]))
+    )
+    assert "error" not in cleared2
+    assert cleared2["status"] == "cleared"
+    assert cleared2["source_account"]["new_balance"] == "-200.00"
+

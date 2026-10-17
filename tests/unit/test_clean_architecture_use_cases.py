@@ -146,8 +146,13 @@ class InMemoryTransactionRepository(ITransactionRepository):
     def __init__(self):
         self.transactions: dict[UUID, Transaction] = {}
 
-    async def get_by_id(self, transaction_id: UUID) -> Transaction | None:
-        return self.transactions.get(transaction_id)
+    async def get_by_id(
+        self, transaction_id: UUID, user_id: UUID | None = None
+    ) -> Transaction | None:
+        tx = self.transactions.get(transaction_id)
+        if tx and user_id and tx.user_id != user_id:
+            return None
+        return tx
 
     async def create(self, transaction: Transaction) -> Transaction:
         self.transactions[transaction.id] = transaction
@@ -158,16 +163,28 @@ class InMemoryTransactionRepository(ITransactionRepository):
             self.transactions[t.id] = t
         return transactions
 
-    async def delete(self, transaction_id: UUID) -> bool:
+    async def update(self, transaction: Transaction) -> Transaction:
+        self.transactions[transaction.id] = transaction
+        return transaction
+
+    async def delete(
+        self, transaction_id: UUID, user_id: UUID | None = None
+    ) -> bool:
         if transaction_id in self.transactions:
+            if user_id and self.transactions[transaction_id].user_id != user_id:
+                return False
             del self.transactions[transaction_id]
             return True
         return False
 
-    async def bulk_delete(self, transaction_ids: list[UUID]) -> int:
+    async def bulk_delete(
+        self, transaction_ids: list[UUID], user_id: UUID | None = None
+    ) -> int:
         count = 0
         for tid in transaction_ids:
             if tid in self.transactions:
+                if user_id and self.transactions[tid].user_id != user_id:
+                    continue
                 del self.transactions[tid]
                 count += 1
         return count
@@ -207,15 +224,24 @@ class InMemoryTransactionRepository(ITransactionRepository):
             res = filtered
         return res[offset : offset + limit]
 
-    async def list_by_installment_id(self, installment_id: UUID) -> list[Transaction]:
+    async def list_by_installment_id(
+        self, installment_id: UUID, user_id: UUID | None = None
+    ) -> list[Transaction]:
         return [
-            t for t in self.transactions.values() if t.installment_id == installment_id
+            t
+            for t in self.transactions.values()
+            if t.installment_id == installment_id
+            and (user_id is None or t.user_id == user_id)
         ]
 
-    async def delete_by_installment_id(self, installment_id: UUID) -> list[Transaction]:
+    async def delete_by_installment_id(
+        self, installment_id: UUID, user_id: UUID | None = None
+    ) -> list[Transaction]:
         deleted = []
         for tid, t in list(self.transactions.items()):
-            if t.installment_id == installment_id:
+            if t.installment_id == installment_id and (
+                user_id is None or t.user_id == user_id
+            ):
                 deleted.append(t)
                 del self.transactions[tid]
         return deleted
@@ -279,14 +305,13 @@ async def test_record_transaction_missing_account_raises_domain_error():
     uc = RecordTransactionUseCase(account_repo, tx_repo, cat_repo)
 
     missing_id = uuid4()
+    tx_input = RecordTransactionInput(
+        amount="50.00",
+        transaction_type=TransactionType.EXPENSE,
+        source_account_id=missing_id,
+    )
     with pytest.raises(AccountNotFoundError):
-        await uc.execute(
-            RecordTransactionInput(
-                amount="50.00",
-                transaction_type=TransactionType.EXPENSE,
-                source_account_id=missing_id,
-            )
-        )
+        await uc.execute(tx_input)
 
 
 @pytest.mark.anyio
@@ -544,10 +569,126 @@ async def test_update_account_use_case_not_found():
     repo = InMemoryAccountRepository()
     uc = UpdateAccountUseCase(repo)
 
+    update_input = UpdateAccountInput(
+        account_id=uuid4(),
+        name="Inexistente",
+    )
     with pytest.raises(AccountNotFoundError):
-        await uc.execute(
-            UpdateAccountInput(
-                account_id=uuid4(),
-                name="Inexistente",
-            )
+        await uc.execute(update_input)
+
+
+@pytest.mark.anyio
+async def test_clear_transaction_use_case_and_user_isolation():
+    from contas.application.use_cases.transactions import ClearTransactionUseCase
+    from contas.domain.enums import TransactionStatus
+    from contas.domain.errors import TransactionNotFoundError
+    from contas.schemas.transaction import ClearTransactionInput
+
+    user1 = uuid4()
+    user2 = uuid4()
+
+    account_repo = InMemoryAccountRepository()
+    tx_repo = InMemoryTransactionRepository()
+    cat_repo = InMemoryCategoryRepository()
+
+    acc = Account(
+        name="Cartão Magalu",
+        account_type=AccountType.CREDIT_CARD,
+        balance=Decimal("0.00"),
+        user_id=user1,
+    )
+    await account_repo.create(acc)
+
+    record_uc = RecordTransactionUseCase(account_repo, tx_repo, cat_repo)
+    clear_uc = ClearTransactionUseCase(account_repo, tx_repo)
+
+    # Record a pending invoice installment (e.g. 2/4 of 61.12)
+    recorded = await record_uc.execute(
+        RecordTransactionInput(
+            amount="61.12",
+            transaction_type=TransactionType.EXPENSE,
+            source_account_id=acc.id,
+            description="PICPAY*Cristiano D02/04",
+            status=TransactionStatus.PENDING,
+            total_installments=4,
+            installment_number=2,
+            user_id=user1,
         )
+    )
+    assert recorded["amount"] == "61.12"
+    assert recorded["status"] == "pending"
+    assert recorded["installment_number"] == 2
+    assert recorded["total_installments"] == 4
+    # Must NOT have generated 4 installments or divided 61.12 by 4
+    assert len(tx_repo.transactions) == 1
+    assert (await account_repo.get_by_id(acc.id, user_id=user1)).balance == Decimal(
+        "0.00"
+    )
+
+    tx_id = UUID(recorded["id"])
+
+    # Another user (user2) cannot clear user1's transaction
+    wrong_user_input = ClearTransactionInput(transaction_id=tx_id, user_id=user2)
+    with pytest.raises(TransactionNotFoundError):
+        await clear_uc.execute(wrong_user_input)
+
+    # user1 clears the pending transaction -> balance is updated
+    cleared = await clear_uc.execute(
+        ClearTransactionInput(transaction_id=tx_id, user_id=user1)
+    )
+    assert cleared["status"] == "cleared"
+    assert cleared["source_account"]["new_balance"] == "-61.12"
+    assert (await account_repo.get_by_id(acc.id, user_id=user1)).balance == Decimal(
+        "-61.12"
+    )
+    # Calling clear again on an already-cleared transaction is idempotent
+    cleared_again = await clear_uc.execute(
+        ClearTransactionInput(transaction_id=tx_id, user_id=user1)
+    )
+    assert cleared_again["status"] == "cleared"
+    assert cleared_again["source_account"]["new_balance"] == "-61.12"
+
+    # Also test clearing pending INCOME and TRANSFER
+    acc2 = Account(
+        name="Conta Corrente",
+        account_type=AccountType.CHECKING,
+        balance=Decimal("100.00"),
+        user_id=user1,
+    )
+    await account_repo.create(acc2)
+
+    inc_tx = await record_uc.execute(
+        RecordTransactionInput(
+            amount="200.00",
+            transaction_type=TransactionType.INCOME,
+            source_account_id=acc2.id,
+            description="Salário Pendente",
+            status=TransactionStatus.PENDING,
+            user_id=user1,
+        )
+    )
+    cleared_inc = await clear_uc.execute(
+        ClearTransactionInput(transaction_id=UUID(inc_tx["id"]), user_id=user1)
+    )
+    assert cleared_inc["source_account"]["new_balance"] == "300.00"
+
+    trf_tx = await record_uc.execute(
+        RecordTransactionInput(
+            amount="61.12",
+            transaction_type=TransactionType.TRANSFER,
+            source_account_id=acc2.id,
+            destination_account_id=acc.id,
+            description="Pagamento Fatura",
+            status=TransactionStatus.PENDING,
+            user_id=user1,
+        )
+    )
+    cleared_trf = await clear_uc.execute(
+        ClearTransactionInput(transaction_id=UUID(trf_tx["id"]), user_id=user1)
+    )
+    assert cleared_trf["source_account"]["new_balance"] == "238.88"
+    assert (await account_repo.get_by_id(acc.id, user_id=user1)).balance == Decimal(
+        "0.00"
+    )
+
+

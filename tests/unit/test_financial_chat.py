@@ -367,7 +367,9 @@ def test_execute_read_tool_get_installment_plan():
             categories=[],
         )
 
-    mock_ui.get_installment_plan.assert_called_once_with(installment_id=UUID(inst_uuid))
+    mock_ui.get_installment_plan.assert_called_once_with(
+        installment_id=UUID(inst_uuid), user_id=None
+    )
     data = json.loads(res)
     assert data["total_installments"] == 10
 
@@ -390,7 +392,9 @@ def test_execute_read_tool_get_financial_summary():
             categories=[],
         )
 
-    mock_ui.get_financial_summary.assert_called_once_with(month=10, year=2026)
+    mock_ui.get_financial_summary.assert_called_once_with(
+        month=10, year=2026, user_id=None
+    )
     data = json.loads(res)
     assert data["reference_date"] == "2026-10-01"
     assert data["total_assets"] == "1000.00"
@@ -407,7 +411,7 @@ def test_execute_pending_action_create_category():
         res = execute_pending_action(pending)
 
     mock_ui.create_category.assert_called_once_with(
-        name="Lazer", category_type="expense"
+        name="Lazer", category_type="expense", user_id=None
     )
     assert res["name"] == "Lazer"
 
@@ -437,6 +441,7 @@ def test_execute_pending_action_set_budget():
         amount="800.00",
         month=9,
         year=2026,
+        user_id=None,
     )
     assert res["amount"] == "800.00"
 
@@ -459,8 +464,33 @@ def test_execute_pending_action_delete_transaction():
     mock_ui.delete_transaction.assert_called_once_with(
         transaction_id=UUID(tx_id),
         delete_all_installments=True,
+        user_id=None,
     )
     assert "excluído" in res["message"]
+
+
+def test_execute_pending_action_clear_transaction():
+    from uuid import UUID
+
+    tx_id = "33333333-3333-3333-3333-333333333333"
+    user_id = UUID("55555555-5555-5555-5555-555555555555")
+    pending = PendingAction(
+        tool_name="clear_transaction",
+        arguments={"transaction_id": tx_id, "description": "Fatura Cartão"},
+        summary="Liquidar lançamento",
+        user_id=user_id,
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.clear_transaction.return_value = {
+            "message": "Transação liquidada com sucesso!"
+        }
+        res = execute_pending_action(pending)
+
+    mock_ui.clear_transaction.assert_called_once_with(
+        transaction_id=UUID(tx_id),
+        user_id=user_id,
+    )
+    assert "liquidada" in res["message"]
 
 
 def test_execute_pending_action_delete_account():
@@ -483,6 +513,7 @@ def test_execute_pending_action_delete_account():
     mock_ui.delete_account.assert_called_once_with(
         account_id=UUID(acc_id),
         force_cascade=False,
+        user_id=None,
     )
     assert "desativada" in res["message"]
 
@@ -717,3 +748,76 @@ def test_execute_read_tool_get_statement_with_search():
     assert call_kwargs["limit"] == 500
     data = json.loads(result)
     assert len(data["transactions"]) == 1
+
+
+def test_find_account_by_name_matching_and_update_account():
+    from uuid import UUID
+
+    from contas.services.financial_chat import _find_account_by_name
+
+    accounts = [
+        {"id": "00000000-0000-0000-0000-000000000001", "name": "Cartão Magalu"},
+        {"id": "00000000-0000-0000-0000-000000000002", "name": "Cartão"},
+        {"id": "00000000-0000-0000-0000-000000000003", "name": "Cartão Mãe"},
+    ]
+
+    # Empty list
+    assert _find_account_by_name([], "Cartão") is None
+    # Empty query with fallback_first
+    assert _find_account_by_name(accounts, "", fallback_first=True) == accounts[0]
+    assert _find_account_by_name(accounts, "", fallback_first=False) is None
+
+    # 1. Exact case-insensitive match picks "Cartão" even though "Cartão Magalu" is first
+    assert _find_account_by_name(accounts, "cartão") == accounts[1]
+
+    # 2. Exact accent-insensitive match picks "Cartão Mãe"
+    assert _find_account_by_name(accounts, "Cartao Mae") == accounts[2]
+
+    # 3. Substring match picks "Cartão Magalu"
+    assert _find_account_by_name(accounts, "Magalu") == accounts[0]
+
+    # 4. Reverse substring match (account name inside target)
+    assert (
+        _find_account_by_name(accounts, "Fatura do Cartão Magalu Outubro")
+        == accounts[0]
+    )
+
+    # 5. Non-matching query
+    assert _find_account_by_name(accounts, "Bradesco", fallback_first=False) is None
+    assert (
+        _find_account_by_name(accounts, "Bradesco", fallback_first=True)
+        == accounts[0]
+    )
+
+    # Test update_account execution and clear_transaction summary
+    s_clr = _build_action_summary(
+        "clear_transaction",
+        {"transaction_id": "33333333-3333-3333-3333-333333333333", "description": "Fatura"},
+        accounts,
+        [],
+    )
+    assert "Liquidar" in s_clr
+    assert "Fatura" in s_clr
+
+    user_id = UUID("55555555-5555-5555-5555-555555555555")
+    pending_upd = PendingAction(
+        tool_name="update_account",
+        arguments={"account_name": "Cartao Mae", "new_name": "Cartão Mãe Itaú"},
+        summary="Renomear conta",
+        accounts=accounts,
+        user_id=user_id,
+    )
+    with patch("contas.services.financial_chat.UIService") as mock_ui:
+        mock_ui.update_account.return_value = {
+            "id": accounts[2]["id"],
+            "name": "Cartão Mãe Itaú",
+        }
+        res = execute_pending_action(pending_upd)
+    mock_ui.update_account.assert_called_once_with(
+        account_id=UUID(accounts[2]["id"]),
+        name="Cartão Mãe Itaú",
+        is_active=None,
+        user_id=user_id,
+    )
+    assert res["name"] == "Cartão Mãe Itaú"
+

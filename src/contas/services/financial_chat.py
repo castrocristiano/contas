@@ -412,6 +412,31 @@ _TOOLS: list[dict] = [
     {
         "type": "function",
         "function": {
+            "name": "clear_transaction",
+            "description": (
+                "Marca uma transação financeira pendente como liquidada (paga/efetivada). "
+                "Ao liquidar, o valor é debitado (ou creditado) no saldo da conta. "
+                "Use para pagamentos de fatura, quitação de boletos pendentes, etc."
+            ),
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "transaction_id": {
+                        "type": "string",
+                        "description": "UUID da transação pendente a ser liquidada.",
+                    },
+                    "description": {
+                        "type": "string",
+                        "description": "Breve descrição ou identificação do lançamento a ser liquidado.",
+                    },
+                },
+                "required": ["transaction_id"],
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "delete_account",
             "description": (
                 "Exclui ou desativa uma ou mais contas financeiras. "
@@ -457,6 +482,7 @@ class PendingAction:
     # Context needed to resolve IDs at execution time
     accounts: list[dict] = field(default_factory=list)
     categories: list[dict] = field(default_factory=list)
+    user_id: Any = None
 
 
 # ---------------------------------------------------------------------------
@@ -464,11 +490,66 @@ class PendingAction:
 # ---------------------------------------------------------------------------
 
 
+def _normalize_text(text: str) -> str:
+    """Normalize text for case-insensitive and accent-insensitive comparison."""
+    import unicodedata
+
+    normalized = unicodedata.normalize("NFKD", text.strip().lower())
+    return "".join(c for c in normalized if not unicodedata.combining(c))
+
+
+def _find_account_by_name(
+    accounts: list[dict],
+    account_name: str | None,
+    *,
+    fallback_first: bool = False,
+) -> dict | None:
+    """Find an account by name prioritizing exact match before substring match."""
+    if not accounts:
+        return None
+    if not account_name or not account_name.strip():
+        return accounts[0] if fallback_first else None
+
+    raw_target = account_name.strip().lower()
+    norm_target = _normalize_text(account_name)
+
+    # 1. Exact case-insensitive match
+    for acc in accounts:
+        if acc["name"].strip().lower() == raw_target:
+            return acc
+
+    # 2. Exact accent-insensitive match
+    for acc in accounts:
+        if _normalize_text(acc["name"]) == norm_target:
+            return acc
+
+    # 3. Substring match (target inside account name), preferring closest length
+    sub_matches = [
+        acc for acc in accounts if norm_target in _normalize_text(acc["name"])
+    ]
+    if sub_matches:
+        sub_matches.sort(key=lambda a: len(a["name"]))
+        return sub_matches[0]
+
+    # 4. Reverse substring match (account name inside target), preferring longest account name
+    rev_matches = [
+        acc
+        for acc in accounts
+        if _normalize_text(acc["name"]) and _normalize_text(acc["name"]) in norm_target
+    ]
+    if rev_matches:
+        rev_matches.sort(key=lambda a: len(a["name"]), reverse=True)
+        return rev_matches[0]
+
+    return accounts[0] if fallback_first else None
+
+
 def _execute_read_tool(
     name: str,
     args: dict[str, Any],
     accounts: list[dict],
     categories: list[dict],
+    user_id: Any = None,
 ) -> str:
     """Execute a read-only tool and return the result serialised as JSON."""
     now = datetime.now(UTC)
@@ -476,29 +557,31 @@ def _execute_read_tool(
 
     if name == "list_accounts":
         result = UIService.list_accounts(
-            include_inactive=args.get("include_inactive", False)
+            include_inactive=args.get("include_inactive", False),
+            user_id=user_id,
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
     if name == "list_categories":
-        result = UIService.list_categories(category_type=args.get("category_type"))
+        result = UIService.list_categories(
+            category_type=args.get("category_type"),
+            user_id=user_id,
+        )
         return json.dumps(result, ensure_ascii=False, default=str)
 
     if name == "get_financial_summary":
         result = UIService.get_financial_summary(
             month=args.get("month", now.month),
             year=args.get("year", now.year),
+            user_id=user_id,
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
     if name == "get_statement":
         account_name = args.get("account_name")
-        account = None
-        if account_name:
-            account = next(
-                (a for a in accounts if account_name.lower() in a["name"].lower()),
-                None,
-            )
+        account = _find_account_by_name(
+            accounts, account_name, fallback_first=not bool(account_name)
+        )
         if account is None and accounts:
             account = accounts[0]
         if account is None:
@@ -518,6 +601,7 @@ def _execute_read_tool(
             limit=args.get("limit", 500),
             date_type=args.get("date_type", "transaction_date"),
             search=args.get("search"),
+            user_id=user_id,
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
@@ -525,6 +609,7 @@ def _execute_read_tool(
         result = UIService.get_budget_status(
             month=args.get("month", now.month),
             year=args.get("year", now.year),
+            user_id=user_id,
         )
         return json.dumps(result, ensure_ascii=False, default=str)
 
@@ -535,7 +620,9 @@ def _execute_read_tool(
         if not inst_id:
             logger.warning("installment_id is missing for get_installment_plan")
             return json.dumps({"error": "Parâmetro 'installment_id' é obrigatório."})
-        result = UIService.get_installment_plan(installment_id=UUID(inst_id))
+        result = UIService.get_installment_plan(
+            installment_id=UUID(inst_id), user_id=user_id
+        )
         return json.dumps(result, ensure_ascii=False, default=str)
 
     logger.warning("Unknown read tool requested: %s", name)
@@ -560,25 +647,19 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
     if pending.tool_name == "record_transaction":
         # Resolve account by name
         account_name = args.get("account_name", "")
-        account = next(
-            (a for a in pending.accounts if account_name.lower() in a["name"].lower()),
-            pending.accounts[0] if pending.accounts else None,
+        account = _find_account_by_name(
+            pending.accounts, account_name, fallback_first=not bool(account_name)
         )
         if account is None:
             logger.warning("Account not found for record_transaction: %s", account_name)
-            return {"error": {"message": "Conta não encontrada."}}
+            return {"error": {"message": f"Conta '{account_name}' não encontrada."}}
 
         # Resolve optional category
         category_id = None
         cat_name = args.get("category_name")
         if cat_name:
-            cat = next(
-                (
-                    c
-                    for c in pending.categories
-                    if cat_name.lower() in c["name"].lower()
-                ),
-                None,
+            cat = _find_account_by_name(
+                pending.categories, cat_name, fallback_first=False
             )
             if cat:
                 category_id = UUID(cat["id"])
@@ -617,6 +698,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             due_date=due_date,
             total_installments=total_installments,
             total_amount=total_amount,
+            user_id=pending.user_id,
         )
         logger.info("record_transaction result: %s", res)
         return res
@@ -626,15 +708,15 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             name=args["name"],
             account_type=args.get("account_type", "checking"),
             initial_balance=args.get("initial_balance", "0.00"),
+            user_id=pending.user_id,
         )
         logger.info("create_account result: %s", res)
         return res
 
     if pending.tool_name == "update_account":
         acc_name = args.get("account_name", "")
-        account = next(
-            (a for a in pending.accounts if acc_name.lower() in a["name"].lower()),
-            None,
+        account = _find_account_by_name(
+            pending.accounts, acc_name, fallback_first=False
         )
         if not account:
             return {"error": {"message": f"Conta '{acc_name}' não encontrada."}}
@@ -644,6 +726,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             account_id=UUID(account["id"]),
             name=args.get("new_name"),
             is_active=args.get("is_active"),
+            user_id=pending.user_id,
         )
         logger.info("update_account result: %s", res)
         return res
@@ -652,15 +735,15 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         res = UIService.create_category(
             name=args["name"],
             category_type=args["category_type"],
+            user_id=pending.user_id,
         )
         logger.info("create_category result: %s", res)
         return res
 
     if pending.tool_name == "set_budget":
         cat_name = args.get("category_name", "")
-        category = next(
-            (c for c in pending.categories if cat_name.lower() in c["name"].lower()),
-            None,
+        category = _find_account_by_name(
+            pending.categories, cat_name, fallback_first=False
         )
         if not category:
             logger.warning("Category not found for set_budget: %s", cat_name)
@@ -674,6 +757,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             amount=args["amount"],
             month=month,
             year=year,
+            user_id=pending.user_id,
         )
         logger.info("set_budget result: %s", res)
         return res
@@ -685,8 +769,20 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         res = UIService.delete_transaction(
             transaction_id=UUID(tx_id_str),
             delete_all_installments=args.get("delete_all_installments", False),
+            user_id=pending.user_id,
         )
         logger.info("delete_transaction result: %s", res)
+        return res
+
+    if pending.tool_name == "clear_transaction":
+        tx_id_str = args.get("transaction_id")
+        if not tx_id_str:
+            return {"error": {"message": "ID da transação não fornecido."}}
+        res = UIService.clear_transaction(
+            transaction_id=UUID(tx_id_str),
+            user_id=pending.user_id,
+        )
+        logger.info("clear_transaction result: %s", res)
         return res
 
     if pending.tool_name == "delete_account":
@@ -702,9 +798,8 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
         errors = []
 
         for name in acc_names:
-            account = next(
-                (a for a in pending.accounts if name.lower() in a["name"].lower()),
-                None,
+            account = _find_account_by_name(
+                pending.accounts, name, fallback_first=False
             )
             if not account:
                 errors.append(f"Conta '{name}' não encontrada.")
@@ -713,6 +808,7 @@ def execute_pending_action(pending: PendingAction) -> dict[str, Any]:
             res = UIService.delete_account(
                 account_id=UUID(account["id"]),
                 force_cascade=force_cascade,
+                user_id=pending.user_id,
             )
             if "error" in res:
                 errors.append(
@@ -853,6 +949,15 @@ def _build_action_summary(
             f"*Atenção: Se o lançamento for liquidado, o saldo da conta será estornado automaticamente.*"
         )
 
+    if name == "clear_transaction":
+        desc = (
+            args.get("description") or f"ID `{args.get('transaction_id', '')[:8]}...`"
+        )
+        return (
+            f"✅ **Liquidar lançamento (marcar como pago/efetivado)**: {desc}\n\n"
+            f"*O valor será debitado/creditado no saldo da conta.*"
+        )
+
     if name == "delete_account":
         force = args.get("force_cascade", False)
         force_note = (
@@ -895,6 +1000,7 @@ Diretrizes:
 - Ao registrar compras parceladas (`record_transaction`), se o usuário disser "em 10x", "em 10 vezes", "parcelado em 3x", etc., você DEVE preencher `total_installments`. Se o valor fornecido for o da parcela (ex: "10 vezes de 216.81"), preencha `amount="216.81"` e `total_amount="2168.10"`. Se o valor fornecido for o valor total (ex: "compra de 1000 em 10x"), preencha `total_amount="1000.00"` e `amount="100.00"`.
 - Se o usuário pedir para excluir ou desativar múltiplas contas de uma só vez (ex: "apague as contas X, Y e Z"), use `delete_account` passando a lista de nomes no campo `account_names`.
 - Se o usuário pedir para excluir um lançamento por descrição ou valor (sem saber o ID), primeiro consulte `get_statement` para obter o `id` da transação antes de propor a ação `delete_transaction`.
+- Se o usuário pedir para liquidar, pagar, marcar como pago ou efetivar um lançamento pendente, consulte `get_statement` se necessário para achar o `id` e proponha a ação `clear_transaction`.
 - Formate valores monetários sempre como R$ X.XXX,XX (padrão brasileiro).
 - Se dados de ferramentas contiverem um campo "error", informe o usuário de forma amigável.
 - Se o usuário pedir algo que não é possível com os dados disponíveis, explique gentilmente.
@@ -908,6 +1014,7 @@ _WRITE_TOOLS: frozenset[str] = frozenset(
         "create_category",
         "set_budget",
         "delete_transaction",
+        "clear_transaction",
         "delete_account",
     }
 )
@@ -922,6 +1029,7 @@ def chat_with_financial_assistant(
     messages: list[dict[str, Any]],
     client: OpenAI | None = None,
     model: str = "gpt-4o-mini",
+    user_id: Any = None,
 ) -> tuple[str, PendingAction | None]:
     """Run one conversational turn with the financial assistant.
 
@@ -929,6 +1037,7 @@ def chat_with_financial_assistant(
         messages: Full conversation history (role/content dicts), WITHOUT system prompt.
         client: OpenAI client — injected for unit testing; created from settings if None.
         model: OpenAI model identifier.
+        user_id: Multi-tenant user ID to isolate financial data.
 
     Returns:
         A tuple of (reply_text, pending_action):
@@ -945,8 +1054,8 @@ def chat_with_financial_assistant(
         client = OpenAI(api_key=api_key)
 
     # Load lightweight context once per turn
-    accounts: list[dict] = UIService.list_accounts().get("accounts", [])
-    categories: list[dict] = UIService.list_categories().get("categories", [])
+    accounts: list[dict] = UIService.list_accounts(user_id=user_id).get("accounts", [])
+    categories: list[dict] = UIService.list_categories(user_id=user_id).get("categories", [])
 
     full_messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},
@@ -1012,6 +1121,7 @@ def chat_with_financial_assistant(
                     summary=summary,
                     accounts=accounts,
                     categories=categories,
+                    user_id=user_id,
                 )
                 reply = (
                     msg.content
@@ -1020,7 +1130,9 @@ def chat_with_financial_assistant(
                 return reply, pending
 
             # Read-only: execute and feed result back to the model
-            tool_result = _execute_read_tool(name, args, accounts, categories)
+            tool_result = _execute_read_tool(
+                name, args, accounts, categories, user_id=user_id
+            )
             full_messages.append(
                 {
                     "role": "tool",

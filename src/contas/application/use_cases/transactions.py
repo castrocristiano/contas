@@ -18,6 +18,8 @@ from contas.domain.errors import (
     TransferSameAccountError,
 )
 from contas.schemas.transaction import (
+    ClearTransactionInput,
+    ClearTransactionResponse,
     DeleteTransactionInput,
     DeleteTransactionResponse,
     FinancialSummaryAccountItem,
@@ -71,7 +73,9 @@ class RecordTransactionUseCase:
                 parsed_due_date = parsed_due_date.replace(tzinfo=UTC)
 
         is_installment = (
-            payload.total_installments is not None and payload.total_installments > 1
+            payload.total_installments is not None
+            and payload.total_installments > 1
+            and payload.installment_number is None
         )
         installment_id = uuid4() if is_installment else None
         installment_amounts: list[Decimal] = []
@@ -110,7 +114,7 @@ class RecordTransactionUseCase:
             assert payload.destination_account_id is not None
             destination_account = await self.account_repo.get_by_id(
                 payload.destination_account_id,
-                user_id=payload.user_id,
+                user_id=tx_user_id,
                 only_active=True,
             )
             if not destination_account:
@@ -121,7 +125,7 @@ class RecordTransactionUseCase:
         # 3. Validate category
         if payload.category_id:
             category = await self.category_repo.get_by_id(
-                payload.category_id, user_id=payload.user_id, only_active=True
+                payload.category_id, user_id=tx_user_id, only_active=True
             )
             if not category:
                 raise CategoryNotFoundError(str(payload.category_id))
@@ -377,10 +381,12 @@ class DeleteTransactionUseCase:
         if not tx:
             raise TransactionNotFoundError(str(payload.transaction_id))
 
+        effective_user_id = payload.user_id or tx.user_id
+
         transactions_to_delete = []
         if payload.delete_all_installments and tx.installment_id is not None:
             transactions_to_delete = await self.transaction_repo.list_by_installment_id(
-                tx.installment_id, user_id=payload.user_id
+                tx.installment_id, user_id=effective_user_id
             )
         else:
             transactions_to_delete = [tx]
@@ -389,7 +395,9 @@ class DeleteTransactionUseCase:
         for item in transactions_to_delete:
             if item.status == TransactionStatus.CLEARED:
                 source_account = await self.account_repo.get_by_id(
-                    item.source_account_id, user_id=payload.user_id, only_active=False
+                    item.source_account_id,
+                    user_id=effective_user_id,
+                    only_active=False,
                 )
                 if source_account:
                     if item.transaction_type == TransactionType.EXPENSE:
@@ -404,7 +412,7 @@ class DeleteTransactionUseCase:
                         if item.destination_account_id:
                             dest = await self.account_repo.get_by_id(
                                 item.destination_account_id,
-                                user_id=payload.user_id,
+                                user_id=effective_user_id,
                                 only_active=False,
                             )
                             if dest:
@@ -412,7 +420,7 @@ class DeleteTransactionUseCase:
                                 await self.account_repo.update(dest)
                     await self.account_repo.update(source_account)
 
-            await self.transaction_repo.delete(item.id, user_id=payload.user_id)
+            await self.transaction_repo.delete(item.id, user_id=effective_user_id)
 
         count = len(transactions_to_delete)
         return DeleteTransactionResponse(
@@ -420,6 +428,62 @@ class DeleteTransactionUseCase:
             deleted_count=count,
             reverted_amount=f"{reverted_total:.2f}",
             message=f"Successfully deleted {count} transaction(s) and reverted R$ {reverted_total:.2f}.",
+        ).model_dump(mode="json")
+
+
+class ClearTransactionUseCase:
+    def __init__(
+        self,
+        account_repo: IAccountRepository,
+        transaction_repo: ITransactionRepository,
+    ) -> None:
+        self.account_repo = account_repo
+        self.transaction_repo = transaction_repo
+
+    async def execute(self, payload: ClearTransactionInput) -> dict[str, Any]:
+        tx = await self.transaction_repo.get_by_id(
+            payload.transaction_id, user_id=payload.user_id
+        )
+        if not tx:
+            raise TransactionNotFoundError(str(payload.transaction_id))
+
+        effective_user_id = payload.user_id or tx.user_id
+        source_account = await self.account_repo.get_by_id(
+            tx.source_account_id, user_id=effective_user_id, only_active=False
+        )
+        if not source_account:
+            raise AccountNotFoundError(str(tx.source_account_id))
+
+        if tx.status != TransactionStatus.CLEARED:
+            if tx.transaction_type == TransactionType.EXPENSE:
+                source_account.balance -= tx.amount
+            elif tx.transaction_type == TransactionType.INCOME:
+                source_account.balance += tx.amount
+            elif tx.transaction_type == TransactionType.TRANSFER:
+                source_account.balance -= tx.amount
+                if tx.destination_account_id:
+                    dest = await self.account_repo.get_by_id(
+                        tx.destination_account_id,
+                        user_id=effective_user_id,
+                        only_active=False,
+                    )
+                    if dest:
+                        dest.balance += tx.amount
+                        await self.account_repo.update(dest)
+            await self.account_repo.update(source_account)
+            tx.status = TransactionStatus.CLEARED
+            await self.transaction_repo.update(tx)
+
+        return ClearTransactionResponse(
+            transaction_id=tx.id,
+            status=tx.status,
+            amount=f"{tx.amount:.2f}",
+            source_account=SourceAccountSummary(
+                id=source_account.id,
+                name=source_account.name,
+                new_balance=f"{source_account.balance:.2f}",
+            ),
+            message=f"Lançamento '{tx.description}' (R$ {tx.amount:.2f}) liquidado com sucesso na conta '{source_account.name}'.",
         ).model_dump(mode="json")
 
 
