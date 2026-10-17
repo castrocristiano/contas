@@ -1,0 +1,64 @@
+{
+  "id": "contas",
+  "realm": "contas",
+  "displayName": "Contas — Gestão Financeira",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": true,
+  "registrationEmailAsUsername": false,
+  "rememberMe": true,
+  "verifyEmail": false,
+  "loginWithEmailAllowed": true,
+  "duplicateEmailsAllowed": false,
+  "resetPasswordAllowed": true,
+  "editUsernameAllowed": false,
+  "roles": {
+    "realm": [
+      {
+        "name": "admin",
+        "description": "Administrador do sistema Contas com permissão para aprovar usuários"
+      },
+      {
+        "name": "user",
+        "description": "Usuário padrão do sistema Contas"
+      }
+    ]
+  },
+  "defaultRoles": [
+    "user"
+  ],
+  "clients": [
+    {
+      "clientId": "contas-app",
+      "name": "Contas Web Application (Streamlit)",
+      "description": "Cliente OIDC da aplicação Contas",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "contas-keycloak-client-secret",
+      "publicClient": false,
+      "standardFlowEnabled": true,
+      "implicitFlowEnabled": false,
+      "directAccessGrantsEnabled": true,
+      "serviceAccountsEnabled": true,
+      "redirectUris": [
+        "http://localhost:8501/*",
+        "http://localhost:8501",
+        "http://127.0.0.1:8501/*",
+        "http://192.168.1.20:8501/*",
+        "http://192.168.1.20:8501"
+      ],
+      "webOrigins": [
+        "+"
+      ],
+      "protocol": "openid-connect",
+      "fullScopeAllowed": true,
+      "defaultClientScopes": [
+        "web-origins",
+        "acr",
+        "profile",
+        "roles",
+        "email"
+      ]
+    }
+  ]
+}

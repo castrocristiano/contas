@@ -15,6 +15,7 @@ from contas.schemas.user import (
     AuthenticateUserInput,
     ChangePasswordInput,
     GoogleAuthInput,
+    KeycloakAuthInput,
     RegisterUserInput,
 )
 from contas.security.password import hash_password, verify_password
@@ -129,6 +130,77 @@ class GoogleOAuthUseCase:
                     role="admin" if is_first else "user",
                 )
                 user = await self.user_repo.create(user)
+
+        if not user.is_active:
+            raise InvalidCredentialsError()
+
+        if not user.is_approved:
+            raise AccountPendingApprovalError()
+
+        return {
+            "id": str(user.id),
+            "name": user.name,
+            "email": user.email,
+            "username": user.username,
+            "role": user.role,
+            "avatar_url": user.avatar_url,
+            "is_approved": user.is_approved,
+        }
+
+
+class KeycloakOAuthUseCase:
+    def __init__(self, user_repo: IUserRepository):
+        self.user_repo = user_repo
+
+    async def _resolve_unique_username(self, raw_username: str, email: str) -> str:
+        base_username = raw_username.lower().strip() or email.split("@")[0]
+        candidate = base_username
+        suffix = 1
+        while await self.user_repo.get_by_username(candidate):
+            candidate = f"{base_username}{suffix}"
+            suffix += 1
+        return candidate
+
+    async def _update_existing_user(
+        self, user: User, payload: KeycloakAuthInput, has_admin_role: bool
+    ) -> User:
+        user.name = payload.name or user.name
+        user.auth_provider = "keycloak"
+        if payload.avatar_url:
+            user.avatar_url = payload.avatar_url
+        if has_admin_role:
+            user.role = "admin"
+            user.is_approved = True
+        return await self.user_repo.update(user)
+
+    async def _create_new_user(
+        self, payload: KeycloakAuthInput, has_admin_role: bool
+    ) -> User:
+        user_count = await self.user_repo.count()
+        is_admin = (user_count == 0) or has_admin_role
+        new_username = await self._resolve_unique_username(
+            payload.username, payload.email
+        )
+        new_user = User(
+            name=payload.name.strip() or new_username,
+            email=payload.email.lower().strip(),
+            username=new_username,
+            auth_provider="keycloak",
+            avatar_url=payload.avatar_url,
+            is_active=True,
+            is_approved=is_admin,
+            role="admin" if is_admin else "user",
+        )
+        return await self.user_repo.create(new_user)
+
+    async def execute(self, payload: KeycloakAuthInput) -> dict:
+        has_admin_role = "admin" in {r.lower() for r in payload.roles}
+        existing = await self.user_repo.get_by_email(payload.email)
+        user = (
+            await self._update_existing_user(existing, payload, has_admin_role)
+            if existing
+            else await self._create_new_user(payload, has_admin_role)
+        )
 
         if not user.is_active:
             raise InvalidCredentialsError()

@@ -8,6 +8,7 @@ from sqlmodel import Field, SQLModel
 class AuthProvider(StrEnum):
     LOCAL = "local"
     GOOGLE = "google"
+    KEYCLOAK = "keycloak"
 
 
 class UserRole(StrEnum):
