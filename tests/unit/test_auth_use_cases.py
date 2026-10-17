@@ -333,3 +333,15 @@ def test_keycloak_oauth_service_urls_and_token_exchange(monkeypatch):
     info_pwd = svc.authenticate_with_password("cristiano", "pass")
     assert info_pwd.sub == "kc-uuid-999"
     assert info_pwd.name == "Cristiano Castro"
+
+    # Simulate 401 Unauthorized on /userinfo due to internal vs external URL issuer mismatch
+    def fake_get_401(url, headers=None, timeout=10):
+        resp = FakeResponse({})
+        resp.ok = False
+        return resp
+
+    monkeypatch.setattr(requests, "get", fake_get_401)
+    info_fallback = svc.exchange_code_for_user_info("auth-code-456")
+    assert info_fallback.sub == "kc-uuid-999"
+    assert info_fallback.username == "cristiano"
+    assert "admin" in info_fallback.roles

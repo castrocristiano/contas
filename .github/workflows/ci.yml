@@ -7,6 +7,8 @@ on:
       - main
       - 'phase/**'
       - 'feature/**'
+      - 'hotfix/**'
+      - 'hotfix*'
   pull_request:
     branches:
       - develop
@@ -200,11 +202,11 @@ jobs:
               --body $'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `'"$BRANCH"$'`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com `uv`\n- [x] Linter e validação de formatação com `ruff`\n- [x] Execução de testes unitários com `pytest`'
           fi
 
-  # Abre PR de develop → main (após build e sonar bem-sucedidos)
+  # Abre PR de develop ou hotfix* → main (após build e sonar bem-sucedidos, disparando nova release ao fazer merge)
   auto-pr-to-main:
     name: Open PR to main
     needs: [build-and-test, sonarqube]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/develop'
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/develop' || startsWith(github.ref, 'refs/heads/hotfix'))
     runs-on: ubuntu-latest
     steps:
       - name: Checkout repository
@@ -216,21 +218,29 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          BRANCH="${GITHUB_REF#refs/heads/}"
           COMMITS_AHEAD=$(git log origin/main..HEAD --oneline 2>/dev/null || git log main..HEAD --oneline 2>/dev/null || true)
           if [ -z "$COMMITS_AHEAD" ]; then
-            echo "Nenhum commit novo entre develop e main. PR não necessário."
+            echo "Nenhum commit novo entre $BRANCH e main. PR não necessário."
             exit 0
           fi
-          EXISTING_PR=$(gh pr list --base main --head develop --state open --json number --jq '.[0].number')
+          EXISTING_PR=$(gh pr list --base main --head "$BRANCH" --state open --json number --jq '.[0].number')
           if [ -n "$EXISTING_PR" ]; then
-            echo "Pull Request #$EXISTING_PR já existe de develop para main."
+            echo "Pull Request #$EXISTING_PR já existe de $BRANCH para main."
           else
-            echo "Criando Pull Request de develop para main..."
+            if [[ "$BRANCH" == hotfix* ]]; then
+              PR_TITLE="hotfix: $BRANCH"
+              PR_BODY=$'### Pull Request Automatizado (Hotfix → main)\n\nEste PR de **hotfix** foi aberto automaticamente pela esteira de CI diretamente para a `main` após a conclusão bem-sucedida do build, linting, testes e SonarQube no branch `'"$BRANCH"$'`.\nAo ser mergeado na `main`, o job `release-on-main` gerará automaticamente uma nova Release.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com `uv`\n- [x] Linter e validação de formatação com `ruff`\n- [x] Execução de testes unitários com `pytest`\n- [x] Quality Gate do SonarQube aprovado'
+            else
+              PR_TITLE="chore: merge develop into main"
+              PR_BODY=$'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com `uv`\n- [x] Linter e validação de formatação com `ruff`\n- [x] Execução de testes unitários com `pytest`'
+            fi
+            echo "Criando Pull Request de $BRANCH para main..."
             gh pr create \
               --base main \
-              --head develop \
-              --title "chore: merge develop into main" \
-              --body $'### Pull Request Automatizado\n\nEste PR foi aberto automaticamente pela esteira de CI após a conclusão bem-sucedida do build, linting e testes unitários no branch `develop`.\n\n#### Verificações Realizadas\n- [x] Resolução de dependências com `uv`\n- [x] Linter e validação de formatação com `ruff`\n- [x] Execução de testes unitários com `pytest`'
+              --head "$BRANCH" \
+              --title "$PR_TITLE" \
+              --body "$PR_BODY"
           fi
 
   # Cria Release no GitHub quando código for mergeado na branch main (após build & sonar com sucesso)
