@@ -9,3 +9,4 @@
 - [x] T007 [UI] Ajustar importação de fatura para manter `is_cleared=False`, adicionar botão de liquidação em lote no Extrato e substituir seletores de conta por ID único em `src/contas/ui/app.py`
 - [x] T008 [SonarQube] Configurar `sonar-project.properties` e `sonar_check.sh` para análise no servidor `dc1` e eliminar code smells reportados
 - [x] T009 [Tests] Adicionar testes unitários e de integração para `ClearTransactionUseCase`, isolamento multi-tenant, chat e importação de parcelas (`127 passed`, 95.2% de cobertura em código novo)
+

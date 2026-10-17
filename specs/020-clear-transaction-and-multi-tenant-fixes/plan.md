@@ -48,3 +48,4 @@ Esta especificação abrange melhorias transversais respeitando a separação da
 
 ## 3. Qualidade e Verificação (SonarQube `dc1`)
 - Configuração de `sonar-project.properties` e `sonar_check.sh` com suporte a token local (`.sonar_token` / `.sonar_remote_token`), geração de relatório `coverage.xml` com `pytest --cov=src/contas` e validação do Quality Gate no servidor `http://192.168.1.20:9000`.
+

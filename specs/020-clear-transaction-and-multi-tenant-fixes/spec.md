@@ -41,3 +41,4 @@ Durante o uso da importação de faturas de cartão de crédito em PDF e da oper
   - Manter todas as operações de saldo estritamente em `Decimal`.
 - **RNF-003 (Testes Automatizados)**:
   - Cobertura unitária e de integração para liquidação de transações, isolamento multi-tenant, chat financeiro e importação de parcelas.
+
