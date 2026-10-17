@@ -11,6 +11,7 @@ from contas.schemas.account import (
 from contas.schemas.budget import GetBudgetStatusInput, SetBudgetInput
 from contas.schemas.category import CreateCategoryInput, ListCategoriesInput
 from contas.schemas.transaction import (
+    ClearTransactionInput,
     DeleteTransactionInput,
     GetFinancialSummaryInput,
     GetInstallmentPlanInput,
@@ -161,7 +162,10 @@ class UIService:
 
     @staticmethod
     def update_account(
-        account_id: UUID, name: str | None = None, is_active: bool | None = None
+        account_id: UUID,
+        name: str | None = None,
+        is_active: bool | None = None,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["update_account"].fn
@@ -171,12 +175,17 @@ class UIService:
                     account_id=account_id,
                     name=name,
                     is_active=is_active,
+                    user_id=user_id,
                 )
             )
         )
 
     @staticmethod
-    def delete_account(account_id: UUID, force_cascade: bool = False) -> dict:
+    def delete_account(
+        account_id: UUID,
+        force_cascade: bool = False,
+        user_id: UUID | None = None,
+    ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["delete_account"].fn
         return run_async(
@@ -184,6 +193,7 @@ class UIService:
                 payload=DeleteAccountInput(
                     account_id=account_id,
                     force_cascade=force_cascade,
+                    user_id=user_id,
                 )
             )
         )
@@ -351,16 +361,22 @@ class UIService:
         )
 
     @staticmethod
-    def get_installment_plan(installment_id: UUID) -> dict:
+    def get_installment_plan(installment_id: UUID, user_id: UUID | None = None) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_installment_plan"].fn
         return run_async(
-            handler(payload=GetInstallmentPlanInput(installment_id=installment_id))
+            handler(
+                payload=GetInstallmentPlanInput(
+                    installment_id=installment_id, user_id=user_id
+                )
+            )
         )
 
     @staticmethod
     def delete_transaction(
-        transaction_id: UUID, delete_all_installments: bool = False
+        transaction_id: UUID,
+        delete_all_installments: bool = False,
+        user_id: UUID | None = None,
     ) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["delete_transaction"].fn
@@ -369,6 +385,23 @@ class UIService:
                 payload=DeleteTransactionInput(
                     transaction_id=transaction_id,
                     delete_all_installments=delete_all_installments,
+                    user_id=user_id,
+                )
+            )
+        )
+
+    @staticmethod
+    def clear_transaction(
+        transaction_id: UUID,
+        user_id: UUID | None = None,
+    ) -> dict:
+        server = get_mcp_server()
+        handler = server._tool_manager._tools["clear_transaction"].fn
+        return run_async(
+            handler(
+                payload=ClearTransactionInput(
+                    transaction_id=transaction_id,
+                    user_id=user_id,
                 )
             )
         )

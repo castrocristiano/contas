@@ -125,18 +125,20 @@ def main():
         # Seção de Extrato
         st.subheader("📜 Extrato de Movimentações")
         if accounts:
+            acc_by_id = {a["id"]: a for a in accounts}
             filter_col1, filter_col_type, filter_col2, filter_col3, filter_col4 = (
                 st.columns([2, 1.5, 1, 1, 1])
             )
             with filter_col1:
-                selected_acc_name = st.selectbox(
+                selected_acc_id = st.selectbox(
                     "Conta",
-                    options=[a["name"] for a in accounts],
+                    options=list(acc_by_id.keys()),
+                    format_func=lambda aid: (
+                        f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                    ),
                     index=0,
                 )
-                selected_acc = next(
-                    a for a in accounts if a["name"] == selected_acc_name
-                )
+                selected_acc = acc_by_id[selected_acc_id]
 
             with filter_col_type:
                 tipo_data = st.selectbox(
@@ -291,7 +293,108 @@ def main():
                     selected_tx_rows = edited_stmt_df[edited_stmt_df["Selecionar"]]
                     sel_tx_count = len(selected_tx_rows)
 
-                    # Ações de Gerenciamento / Exclusão (Individual e em Lote)
+                    # Ações de Gerenciamento: Liquidar e Excluir
+                    with st.expander(
+                        "✅ Liquidar Lançamentos (Marcar como Pago/Liquidado)",
+                        expanded=False,
+                    ):
+                        st.caption(
+                            "Marque como liquidada uma ou mais transações pendentes selecionadas na tabela acima, "
+                            "ou selecione uma avulsa abaixo. Ao liquidar, o valor é debitado/creditado no saldo da conta."
+                        )
+
+                        pending_selected_rows = selected_tx_rows[
+                            selected_tx_rows["Status"] == "Pendente"
+                        ]
+                        pending_sel_count = len(pending_selected_rows)
+
+                        if pending_sel_count > 0:
+                            st.info(
+                                f"📌 Há **{pending_sel_count}** transação(ões) **pendente(s)** selecionada(s) na tabela."
+                            )
+                            col_clear_batch, _ = st.columns([1, 3])
+                            with col_clear_batch:
+                                if st.button(
+                                    f"✅ Liquidar {pending_sel_count} Lançamento(s) Selecionado(s)",
+                                    type="primary",
+                                    key=f"btn_clear_selected_tx_{selected_acc['id']}",
+                                ):
+                                    clear_success = 0
+                                    clear_errors = []
+                                    with st.spinner(
+                                        f"Liquidando {pending_sel_count} transações..."
+                                    ):
+                                        for _, row in pending_selected_rows.iterrows():
+                                            tx_id = UUID(row["ID"])
+                                            res = UIService.clear_transaction(
+                                                transaction_id=tx_id,
+                                                user_id=current_user_id,
+                                            )
+                                            if "error" in res:
+                                                clear_errors.append(
+                                                    f"{row['Descrição']}: {res['error']['message']}"
+                                                )
+                                            else:
+                                                clear_success += 1
+                                    if clear_success > 0:
+                                        st.success(
+                                            f"🎉 {clear_success} lançamento(s) liquidado(s) com sucesso! O saldo da conta foi atualizado."
+                                        )
+                                    if clear_errors:
+                                        st.error(
+                                            "Erros ao liquidar:\n"
+                                            + "\n".join(clear_errors)
+                                        )
+                                    st.session_state[statement_state_key] = False
+                                    st.rerun()
+                            st.divider()
+
+                        pending_txs = [t for t in txs if t["status"] != "cleared"]
+                        if pending_txs:
+                            pending_options = {
+                                f"{datetime.fromisoformat(t['transaction_date']).strftime('%d/%m/%Y')} - {t['description']} ({format_currency(t['amount'])}) [{t['id'][:8]}]": t
+                                for t in pending_txs
+                            }
+                            selected_pending_label = st.selectbox(
+                                "Ou escolha uma transação pendente avulsa:",
+                                options=list(pending_options.keys()),
+                                key=f"select_tx_clear_{selected_acc['id']}",
+                            )
+                            if selected_pending_label:
+                                chosen_clear_tx = pending_options[
+                                    selected_pending_label
+                                ]
+                                col_clr_btn, _ = st.columns([1, 4])
+                                with col_clr_btn:
+                                    if st.button(
+                                        "Confirmar Liquidação Avulsa",
+                                        type="primary",
+                                        key=f"btn_confirm_clear_tx_{selected_acc['id']}",
+                                    ):
+                                        clr_res = UIService.clear_transaction(
+                                            transaction_id=UUID(chosen_clear_tx["id"]),
+                                            user_id=current_user_id,
+                                        )
+                                        if "error" in clr_res:
+                                            st.error(
+                                                f"Erro ao liquidar: {clr_res['error']['message']}"
+                                            )
+                                        else:
+                                            st.success(
+                                                clr_res.get(
+                                                    "message",
+                                                    "Transação liquidada com sucesso!",
+                                                )
+                                            )
+                                            st.session_state[statement_state_key] = (
+                                                False
+                                            )
+                                            st.rerun()
+                        else:
+                            st.info(
+                                "Não há transações pendentes nesta conta no período filtrado."
+                            )
+
                     with st.expander("🗑️ Excluir Lançamentos"):
                         st.caption(
                             "Exclua uma ou mais transações selecionadas na tabela acima, ou escolha uma transação avulsa abaixo. Se a transação for liquidada, o saldo será estornado automaticamente."
@@ -318,6 +421,7 @@ def main():
                                             res = UIService.delete_transaction(
                                                 transaction_id=tx_id,
                                                 delete_all_installments=False,
+                                                user_id=current_user_id,
                                             )
                                             if "error" in res:
                                                 batch_errors.append(
@@ -373,6 +477,7 @@ def main():
                                     del_res = UIService.delete_transaction(
                                         transaction_id=UUID(chosen_tx["id"]),
                                         delete_all_installments=delete_all,
+                                        user_id=current_user_id,
                                     )
                                     if "error" in del_res:
                                         st.error(
@@ -401,6 +506,7 @@ def main():
         if not accounts:
             st.warning("Cadastre uma conta antes de realizar lançamentos.")
         else:
+            acc_by_id = {a["id"]: a for a in accounts}
             categories_data = UIService.list_categories(user_id=current_user_id)
             categories = categories_data.get("categories", [])
 
@@ -411,14 +517,15 @@ def main():
                     "Tipo de Transação", ["Despesa", "Receita", "Transferência"]
                 )
             with pre_col2:
-                conta_origem_name = st.selectbox(
+                conta_origem_id = st.selectbox(
                     "Conta de Origem",
-                    options=[a["name"] for a in accounts],
+                    options=list(acc_by_id.keys()),
+                    format_func=lambda aid: (
+                        f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                    ),
                 )
 
-            selected_account = next(
-                (a for a in accounts if a["name"] == conta_origem_name), None
-            )
+            selected_account = acc_by_id.get(conta_origem_id)
             is_credit_card = (
                 selected_account is not None
                 and selected_account.get("account_type") == "credit_card"
@@ -449,16 +556,17 @@ def main():
                             help="Data de vencimento do pagamento (opcional para contas comuns).",
                         )
 
-                conta_dest = None
+                conta_dest_id = None
                 if tipo == "Transferência":
-                    conta_dest = st.selectbox(
-                        "Conta de Destino",
-                        options=[
-                            a["name"]
-                            for a in accounts
-                            if a["name"] != conta_origem_name
-                        ],
-                    )
+                    dest_options = [aid for aid in acc_by_id if aid != conta_origem_id]
+                    if dest_options:
+                        conta_dest_id = st.selectbox(
+                            "Conta de Destino",
+                            options=dest_options,
+                            format_func=lambda aid: (
+                                f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                            ),
+                        )
 
                 categoria = None
                 if tipo != "Transferência" and categories:
@@ -496,11 +604,9 @@ def main():
                 )
                 if submitted:
                     try:
-                        acc_source = next(
-                            a for a in accounts if a["name"] == conta_origem_name
-                        )
-                        acc_dest = next(
-                            (a for a in accounts if a["name"] == conta_dest), None
+                        acc_source = acc_by_id[conta_origem_id]
+                        acc_dest = (
+                            acc_by_id.get(conta_dest_id) if conta_dest_id else None
                         )
                         cat_obj = next(
                             (c for c in categories if c["name"] == categoria), None
@@ -565,13 +671,48 @@ def main():
             st.warning("Cadastre uma conta antes de importar faturas.")
             st.stop()
 
+        acc_by_id = {a["id"]: a for a in accounts}
+        account_ids = list(acc_by_id.keys())
+
+        if (
+            "invoice_target_account_id" not in st.session_state
+            or st.session_state["invoice_target_account_id"] not in acc_by_id
+        ):
+            default_cc = next(
+                (a["id"] for a in accounts if a.get("account_type") == "credit_card"),
+                account_ids[0],
+            )
+            st.session_state["invoice_target_account_id"] = default_cc
+
+        def _sync_from_top_acc() -> None:
+            sel = st.session_state.get("select_invoice_acc_top")
+            if sel in acc_by_id:
+                st.session_state["invoice_target_account_id"] = sel
+                st.session_state["select_invoice_acc_bottom"] = sel
+
+        def _sync_from_bottom_acc() -> None:
+            sel = st.session_state.get("select_invoice_acc_bottom")
+            if sel in acc_by_id:
+                st.session_state["invoice_target_account_id"] = sel
+                st.session_state["select_invoice_acc_top"] = sel
+
+        st.session_state["select_invoice_acc_top"] = st.session_state[
+            "invoice_target_account_id"
+        ]
+
         col_cfg1, col_cfg2, col_cfg3 = st.columns([1.2, 1.2, 1.6])
         with col_cfg1:
-            selected_acc_name = st.selectbox(
-                "Conta de Destino das Despesas",
-                options=[a["name"] for a in accounts],
+            selected_acc_id = st.selectbox(
+                "💳 Conta de Destino das Despesas",
+                options=account_ids,
+                format_func=lambda aid: (
+                    f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                ),
+                key="select_invoice_acc_top",
+                on_change=_sync_from_top_acc,
             )
-            chosen_account = next(a for a in accounts if a["name"] == selected_acc_name)
+            st.session_state["invoice_target_account_id"] = selected_acc_id
+            chosen_account = acc_by_id[selected_acc_id]
         with col_cfg2:
             model_options = ["o3-mini", "gpt-4o", "gpt-4o-mini"]
             selected_model = st.selectbox(
@@ -718,7 +859,7 @@ def main():
                         "Could not parse extracted invoice due date: %s", extracted_due
                     )
 
-            col_due, col_opt1, col_opt2 = st.columns([1.5, 2, 2])
+            col_due, col_opt1, col_opt2, col_opt3 = st.columns([1.5, 1.8, 1.8, 1.8])
             with col_due:
                 invoice_due_date_val = st.date_input(
                     "📅 Vencimento da Fatura (Cartão)",
@@ -727,14 +868,20 @@ def main():
                     help="Data em que esta fatura vence e deve ser paga.",
                 )
             with col_opt1:
+                import_as_pending = st.checkbox(
+                    "⏳ Lançar como 'Pendente' (não liquidada)",
+                    value=True,
+                    help="Recomendado para faturas de cartão de crédito. As despesas são salvas como pendentes e só são liquidadas quando você pagar a fatura.",
+                )
+            with col_opt2:
                 include_future_txs = st.checkbox(
                     "📅 Listar lançamentos de faturas futuras",
                     value=True,
                     help="Exibe despesas e parcelas listadas para próximas faturas no PDF.",
                 )
-            with col_opt2:
+            with col_opt3:
                 project_future_installments = st.checkbox(
-                    "🔮 Projetar e lançar parcelas futuras restantes como pendentes",
+                    "🔮 Projetar parcelas futuras restantes como pendentes",
                     value=False,
                     help="Se uma compra for parcela 2/10, lança automaticamente as parcelas 3 a 10 como despesas pendentes nos meses seguintes.",
                 )
@@ -883,12 +1030,30 @@ def main():
                 )
                 count_selected = len(selected_df)
 
-                st.info(
-                    f"💰 **Total Selecionado para Importar:** {format_currency(total_selected)} ({count_selected} despesas selecionadas)"
-                )
+                st.session_state["select_invoice_acc_bottom"] = st.session_state[
+                    "invoice_target_account_id"
+                ]
+                col_dest_confirm, col_tot_info = st.columns([1.5, 2.5])
+                with col_dest_confirm:
+                    bottom_acc_id = st.selectbox(
+                        "💳 Confirmar Conta de Destino para Importação",
+                        options=account_ids,
+                        format_func=lambda aid: (
+                            f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                        ),
+                        key="select_invoice_acc_bottom",
+                        on_change=_sync_from_bottom_acc,
+                    )
+                    st.session_state["invoice_target_account_id"] = bottom_acc_id
+                    chosen_account = acc_by_id[bottom_acc_id]
+                with col_tot_info:
+                    st.info(
+                        f"💰 **Total Selecionado para Importar:** {format_currency(total_selected)} ({count_selected} despesas selecionadas) → Conta: **{chosen_account['name']}**"
+                    )
 
                 if st.button(
-                    "🚀 Confirmar e Lançar Despesas Selecionadas", type="primary"
+                    f"🚀 Confirmar e Lançar Despesas Selecionadas na conta '{chosen_account['name']}'",
+                    type="primary",
                 ):
                     selected_indices = selected_df.index.tolist()
                     if not selected_indices:
@@ -899,7 +1064,7 @@ def main():
                         errors = []
 
                         with st.spinner(
-                            f"Importando {len(selected_indices)} despesas..."
+                            f"Importando {len(selected_indices)} despesas na conta {chosen_account['name']}..."
                         ):
                             for idx in selected_indices:
                                 row = edited_df.iloc[idx]
@@ -938,7 +1103,7 @@ def main():
                                 is_future_tx = bool(row["Fatura Futura?"])
                                 status_to_save = (
                                     TransactionStatus.PENDING
-                                    if is_future_tx
+                                    if (import_as_pending or is_future_tx)
                                     else TransactionStatus.CLEARED
                                 )
 
@@ -1011,6 +1176,7 @@ def main():
                                             status=TransactionStatus.PENDING.value,
                                             total_installments=tot_inst,
                                             installment_number=next_inst,
+                                            user_id=current_user_id,
                                         )
                                         if "error" not in sub_res:
                                             projected_count += 1
@@ -1167,6 +1333,7 @@ def main():
                 try:
                     reply, new_pending = chat_with_financial_assistant(
                         messages=chat_history,
+                        user_id=current_user_id,
                     )
                     logger.info(
                         "Assistant reply generated (pending action: %s)",
@@ -1347,19 +1514,19 @@ def main():
         if not all_accounts:
             st.info("Nenhuma conta cadastrada.")
         else:
+            all_acc_by_id = {a["id"]: a for a in all_accounts}
             with st.container(border=True):
                 col_sel_edit, col_name_edit, col_btn_edit = st.columns([2, 2, 1])
-                acc_options = {
-                    f"{a['name']} ({a['account_type'].upper()})": a
-                    for a in all_accounts
-                }
                 with col_sel_edit:
-                    selected_acc_label = st.selectbox(
+                    selected_edit_acc_id = st.selectbox(
                         "Selecione a Conta",
-                        list(acc_options.keys()),
+                        list(all_acc_by_id.keys()),
+                        format_func=lambda aid: (
+                            f"{all_acc_by_id[aid]['name']} ({all_acc_by_id[aid]['account_type'].upper()})"
+                        ),
                         key="select_acc_to_edit",
                     )
-                target_acc = acc_options[selected_acc_label]
+                target_acc = all_acc_by_id[selected_edit_acc_id]
                 with col_name_edit:
                     new_acc_name = st.text_input(
                         "Novo Nome",
@@ -1380,6 +1547,7 @@ def main():
                             res = UIService.update_account(
                                 account_id=UUID(target_acc["id"]),
                                 name=new_acc_name.strip(),
+                                user_id=current_user_id,
                             )
                             if "error" in res:
                                 st.error(
@@ -1494,6 +1662,7 @@ def main():
                             res = UIService.delete_account(
                                 account_id=UUID(acc_id_str),
                                 force_cascade=force_cascade,
+                                user_id=current_user_id,
                             )
                             if "error" in res:
                                 error_list.append(

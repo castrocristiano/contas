@@ -96,12 +96,15 @@ class DeleteAccountUseCase:
 
     async def execute(self, payload: DeleteAccountInput) -> dict[str, Any]:
         account = await self.account_repo.get_by_id(
-            payload.account_id, only_active=False
+            payload.account_id, user_id=payload.user_id, only_active=False
         )
         if not account:
             raise AccountNotFoundError(str(payload.account_id))
 
-        tx_count = await self.transaction_repo.count_by_account(payload.account_id)
+        effective_user_id = payload.user_id or account.user_id
+        tx_count = await self.transaction_repo.count_by_account(
+            payload.account_id, user_id=effective_user_id
+        )
 
         if tx_count > 0 and not payload.force_cascade:
             account.is_active = False
@@ -109,7 +112,9 @@ class DeleteAccountUseCase:
             action_taken = "deactivated"
             message = f"Account '{account.name}' has {tx_count} transaction(s) and was deactivated."
         else:
-            await self.account_repo.delete(payload.account_id)
+            await self.account_repo.delete(
+                payload.account_id, user_id=effective_user_id
+            )
             action_taken = "deleted"
             message = f"Account '{account.name}' was permanently deleted."
 
@@ -126,9 +131,14 @@ class BulkDeleteAccountsUseCase:
         self.account_repo = account_repo
 
     async def execute(
-        self, account_ids: list[UUID], force_cascade: bool = False
+        self,
+        account_ids: list[UUID],
+        force_cascade: bool = False,
+        user_id: UUID | None = None,
     ) -> int:
-        return await self.account_repo.bulk_delete(account_ids, cascade=force_cascade)
+        return await self.account_repo.bulk_delete(
+            account_ids, user_id=user_id, cascade=force_cascade
+        )
 
 
 class UpdateAccountUseCase:
@@ -137,7 +147,7 @@ class UpdateAccountUseCase:
 
     async def execute(self, payload: UpdateAccountInput) -> dict[str, Any]:
         account = await self.account_repo.get_by_id(
-            payload.account_id, only_active=False
+            payload.account_id, user_id=payload.user_id, only_active=False
         )
         if not account:
             raise AccountNotFoundError(str(payload.account_id))
@@ -156,5 +166,6 @@ class UpdateAccountUseCase:
             currency=updated.currency,
             is_active=updated.is_active,
             created_at=updated.created_at,
+            user_id=updated.user_id,
         )
         return response.model_dump(mode="json")

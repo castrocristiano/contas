@@ -52,7 +52,11 @@ class SQLAlchemyAccountRepository(IAccountRepository):
                 query = query.where(ORMAccount.is_active == True)
             if account_type:
                 query = query.where(ORMAccount.account_type == account_type)
-            query = query.offset(offset).limit(limit)
+            query = (
+                query.order_by(ORMAccount.created_at.asc(), ORMAccount.id.asc())
+                .offset(offset)
+                .limit(limit)
+            )
             results = (await session.exec(query)).all()
             return [self._to_domain(acc) for acc in results]
 

@@ -5,6 +5,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from contas.models.account import AccountType
 
+_OWNER_USER_DESC = "ID of the owner user (multi-tenant context)."
+
 
 class CreateAccountInput(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -30,7 +32,7 @@ class CreateAccountInput(BaseModel):
     )
     user_id: UUID | None = Field(
         default=None,
-        description="ID of the owner user (multi-tenant context).",
+        description=_OWNER_USER_DESC,
     )
 
 
@@ -92,6 +94,10 @@ class DeleteAccountInput(BaseModel):
         default=False,
         description="If true, removes the account and all related transactions. If false and transactions exist, deactivates the account.",
     )
+    user_id: UUID | None = Field(
+        default=None,
+        description=_OWNER_USER_DESC,
+    )
 
 
 class DeleteAccountResponse(BaseModel):
@@ -119,4 +125,8 @@ class UpdateAccountInput(BaseModel):
     is_active: bool | None = Field(
         default=None,
         description="Active status of the account.",
+    )
+    user_id: UUID | None = Field(
+        default=None,
+        description=_OWNER_USER_DESC,
     )
