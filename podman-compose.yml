@@ -12,14 +12,45 @@ services:
       PGDATA: /var/lib/postgresql/data/pgdata
     volumes:
       - postgres_data:/var/lib/postgresql/data:Z
+      - ./docker/postgres/init-keycloak-db.sql:/docker-entrypoint-initdb.d/01-init-keycloak-db.sql:ro,Z
     ports:
       - "127.0.0.1:5432:5432"
     healthcheck:
-      test: "pg_isready -U ${POSTGRES_USER:-contas} -d ${POSTGRES_DB:-contas} -h localhost"
+      test: >-
+        sh -c "pg_isready -U ${POSTGRES_USER:-contas} -d ${POSTGRES_DB:-contas} -h localhost &&
+        psql -U ${POSTGRES_USER:-contas} -d ${POSTGRES_DB:-contas} -tAc 'CREATE SCHEMA IF NOT EXISTS keycloak;' >/dev/null 2>&1"
       interval: 5s
       timeout: 5s
       retries: 5
       start_period: 10s
+    networks:
+      - contas_network
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:26.0
+    container_name: contas-keycloak
+    restart: unless-stopped
+    command:
+      - start-dev
+      - --import-realm
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      KC_DB: postgres
+      KC_DB_URL: jdbc:postgresql://db:5432/${POSTGRES_DB:-contas}
+      KC_DB_SCHEMA: keycloak
+      KC_DB_USERNAME: ${POSTGRES_USER:-contas}
+      KC_DB_PASSWORD: ${POSTGRES_PASSWORD:-contas}
+      KC_BOOTSTRAP_ADMIN_USERNAME: ${KEYCLOAK_ADMIN:-admin}
+      KC_BOOTSTRAP_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD:-admin}
+      KC_HTTP_ENABLED: "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_HEALTH_ENABLED: "true"
+    volumes:
+      - ./docker/keycloak:/opt/keycloak/data/import:ro,Z
+    ports:
+      - "${KEYCLOAK_PORT:-8180}:8080"
     networks:
       - contas_network
 
@@ -32,6 +63,8 @@ services:
     depends_on:
       db:
         condition: service_healthy
+      keycloak:
+        condition: service_started
     env_file:
       - .env
     environment:
@@ -39,6 +72,12 @@ services:
       OPENAPI_KEY: ${OPENAPI_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAIAPI_KEY: ${OPENAIAPI_KEY:-}
+      KEYCLOAK_SERVER_URL: ${KEYCLOAK_SERVER_URL:-http://localhost:8180}
+      KEYCLOAK_INTERNAL_URL: ${KEYCLOAK_INTERNAL_URL:-http://keycloak:8080}
+      KEYCLOAK_REALM: ${KEYCLOAK_REALM:-contas}
+      KEYCLOAK_CLIENT_ID: ${KEYCLOAK_CLIENT_ID:-contas-app}
+      KEYCLOAK_CLIENT_SECRET: ${KEYCLOAK_CLIENT_SECRET:-contas-keycloak-client-secret}
+      KEYCLOAK_REDIRECT_URI: ${KEYCLOAK_REDIRECT_URI:-http://localhost:8501}
     ports:
       - "8501:8501"
     networks:
@@ -51,3 +90,4 @@ volumes:
 networks:
   contas_network:
     driver: bridge
+

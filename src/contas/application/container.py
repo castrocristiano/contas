@@ -21,6 +21,7 @@ from contas.application.use_cases.auth import (
     AuthenticateUserUseCase,
     ChangePasswordUseCase,
     GoogleOAuthUseCase,
+    KeycloakOAuthUseCase,
     ListUsersUseCase,
     RegisterUserUseCase,
 )
@@ -61,6 +62,7 @@ class Container:
     register_user_uc: RegisterUserUseCase
     authenticate_user_uc: AuthenticateUserUseCase
     google_oauth_uc: GoogleOAuthUseCase
+    keycloak_oauth_uc: KeycloakOAuthUseCase
     approve_user_uc: ApproveUserUseCase
     list_users_uc: ListUsersUseCase
     change_password_uc: ChangePasswordUseCase
@@ -104,6 +106,7 @@ def get_container() -> Container:
         register_user_uc=RegisterUserUseCase(user_repo),
         authenticate_user_uc=AuthenticateUserUseCase(user_repo),
         google_oauth_uc=GoogleOAuthUseCase(user_repo),
+        keycloak_oauth_uc=KeycloakOAuthUseCase(user_repo),
         approve_user_uc=ApproveUserUseCase(user_repo),
         list_users_uc=ListUsersUseCase(user_repo),
         change_password_uc=ChangePasswordUseCase(user_repo),
