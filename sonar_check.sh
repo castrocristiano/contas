@@ -21,8 +21,14 @@ if ! command -v podman &> /dev/null; then
     CONTAINER_ENGINE="docker"
 fi
 
-# Seleciona o servidor SonarQube (padrão dc1 na rede local, ou customizado via SONAR_HOST_URL)
-SONAR_HOST_URL="${SONAR_HOST_URL:-http://192.168.1.20:9000}"
+# Seleciona o servidor SonarQube (preferência dc1 na rede local, ou localhost/CI)
+if [ -z "${SONAR_HOST_URL:-}" ]; then
+    if curl -s --connect-timeout 2 "http://192.168.1.20:9000/api/system/status" > /dev/null 2>&1; then
+        SONAR_HOST_URL="http://192.168.1.20:9000"
+    else
+        SONAR_HOST_URL="http://localhost:9000"
+    fi
+fi
 
 echo "=========================================================="
 echo "🛡️  Executando análise SonarQube ($SONAR_HOST_URL via $CONTAINER_ENGINE)"
@@ -30,14 +36,13 @@ echo "=========================================================="
 
 # 1. Garante que o SonarQube está acessível
 echo "⏳ Verificando status do SonarQube em $SONAR_HOST_URL..."
-STATUS="DOWN"
-for i in {1..3}; do
+for i in {1..30}; do
     STATUS=$(curl -s --connect-timeout 2 "$SONAR_HOST_URL/api/system/status" | grep -Po '"status":"\K[^"]*' || echo "DOWN")
     if [ "$STATUS" = "UP" ]; then
         echo "✅ Servidor SonarQube pronto para análise!"
         break
     fi
-    sleep 1
+    sleep 2
 done
 
 if [ "$STATUS" != "UP" ]; then
@@ -144,8 +149,8 @@ $CONTAINER_ENGINE run --rm \
     -Dsonar.python.coverage.reportPaths=coverage.xml \
     -Dsonar.python.ruff.reportPaths=ruff-report.json \
     -Dsonar.externalIssuesReportPaths=sonar-formatter-issues.json \
-    -Dsonar.exclusions="**/__pycache__/**,**/*.pyc,**/.venv/**,**/alembic/versions/**,**/docker/keycloak/**" \
-    -Dsonar.coverage.exclusions="tests/**,**/alembic/**,**/__init__.py,**/ui/app.py,**/ui/views/**,**/__main__.py"
+    -Dsonar.exclusions="**/__pycache__/**,**/*.pyc,**/.venv/**,**/alembic/versions/**" \
+    -Dsonar.coverage.exclusions="tests/**,**/alembic/**,**/__init__.py,**/ui/app.py,**/__main__.py"
 
 # 6. Avaliação do Quality Gate
 echo "🚦 Aguardando processamento da análise no servidor SonarQube..."
