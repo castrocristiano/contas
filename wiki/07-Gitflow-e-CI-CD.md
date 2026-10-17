@@ -76,3 +76,4 @@ O job `release-on-main` inspeciona automaticamente o histórico de commits desde
 Além do container SonarQube na esteira do GitHub Actions, o projeto conta com validação direta contra o servidor SonarQube local (`dc1` em `http://192.168.1.20:9000`) através do script `./sonar_check.sh`:
 1. **Prioridade Estrita do Token (`SONAR_TOKEN`)**: O script utiliza prioritariamente a variável `SONAR_TOKEN` (do ambiente, `.env` ou `.sonar_remote_token`).
 2. **Quality Profile (`Contas Python (Sonar way + Formatter)`)**: Combina todas as regras oficiais da *Sonar way* com validação de cobertura (`>= 80%` em código novo) e zero violações de formatação (`ruff format` / `ruff check`).
+
