@@ -7,6 +7,7 @@
 - [x] T005 [MCP & Services] Expor ferramenta MCP `clear_transaction` em `src/contas/tools/transactions.py` e adicionar `UIService.clear_transaction` e propagação de `user_id` em `src/contas/ui/services.py`
 - [x] T006 [Chat] Propagar `user_id` em todas as tools do `FinancialChatAssistant` e implementar `_find_account_by_name` com prioridade para match exato em `src/contas/services/financial_chat.py`
 - [x] T007 [UI] Ajustar importação de fatura para manter `is_cleared=False`, adicionar botão de liquidação em lote no Extrato e substituir seletores de conta por ID único em `src/contas/ui/app.py`
-- [x] T008 [SonarQube] Configurar `sonar-project.properties` e `sonar_check.sh` para análise no servidor `dc1` e eliminar code smells reportados
+- [x] T008 [SonarQube] Configurar `sonar-project.properties` e `sonar_check.sh` priorizando `SONAR_TOKEN`, ativar regra de formatação no Quality Profile (`dc1`) e importar relatórios de formatação (`sonar-formatter-issues.json` e `ruff-report.json`)
 - [x] T009 [Tests] Adicionar testes unitários e de integração para `ClearTransactionUseCase`, isolamento multi-tenant, chat e importação de parcelas (`127 passed`, 95.2% de cobertura em código novo)
+- [x] T010 [Skill & Rule] Criar skill `.agents/skills/formatter/SKILL.md`, script `.agents/skills/formatter/scripts/sonar_formatter_check.py` e regra `.agents/rules/formatter.md`
 
