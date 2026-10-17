@@ -785,14 +785,16 @@ def test_find_account_by_name_matching_and_update_account():
     # 5. Non-matching query
     assert _find_account_by_name(accounts, "Bradesco", fallback_first=False) is None
     assert (
-        _find_account_by_name(accounts, "Bradesco", fallback_first=True)
-        == accounts[0]
+        _find_account_by_name(accounts, "Bradesco", fallback_first=True) == accounts[0]
     )
 
     # Test update_account execution and clear_transaction summary
     s_clr = _build_action_summary(
         "clear_transaction",
-        {"transaction_id": "33333333-3333-3333-3333-333333333333", "description": "Fatura"},
+        {
+            "transaction_id": "33333333-3333-3333-3333-333333333333",
+            "description": "Fatura",
+        },
         accounts,
         [],
     )
@@ -820,4 +822,3 @@ def test_find_account_by_name_matching_and_update_account():
         user_id=user_id,
     )
     assert res["name"] == "Cartão Mãe Itaú"
-

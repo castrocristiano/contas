@@ -254,10 +254,7 @@ async def test_clear_transaction_tool_and_ui_service(server):
     )
     assert tx2["status"] == "pending"
 
-    cleared2 = UIService.clear_transaction(
-        transaction_id=UUID(str(tx2["id"]))
-    )
+    cleared2 = UIService.clear_transaction(transaction_id=UUID(str(tx2["id"])))
     assert "error" not in cleared2
     assert cleared2["status"] == "cleared"
     assert cleared2["source_account"]["new_balance"] == "-200.00"
-

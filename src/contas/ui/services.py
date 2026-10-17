@@ -361,9 +361,7 @@ class UIService:
         )
 
     @staticmethod
-    def get_installment_plan(
-        installment_id: UUID, user_id: UUID | None = None
-    ) -> dict:
+    def get_installment_plan(installment_id: UUID, user_id: UUID | None = None) -> dict:
         server = get_mcp_server()
         handler = server._tool_manager._tools["get_installment_plan"].fn
         return run_async(

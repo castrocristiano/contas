@@ -1055,7 +1055,9 @@ def chat_with_financial_assistant(
 
     # Load lightweight context once per turn
     accounts: list[dict] = UIService.list_accounts(user_id=user_id).get("accounts", [])
-    categories: list[dict] = UIService.list_categories(user_id=user_id).get("categories", [])
+    categories: list[dict] = UIService.list_categories(user_id=user_id).get(
+        "categories", []
+    )
 
     full_messages: list[dict] = [
         {"role": "system", "content": SYSTEM_PROMPT},

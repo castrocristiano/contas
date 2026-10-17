@@ -133,7 +133,9 @@ def main():
                 selected_acc_id = st.selectbox(
                     "Conta",
                     options=list(acc_by_id.keys()),
-                    format_func=lambda aid: f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})",
+                    format_func=lambda aid: (
+                        f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                    ),
                     index=0,
                 )
                 selected_acc = acc_by_id[selected_acc_id]
@@ -292,13 +294,18 @@ def main():
                     sel_tx_count = len(selected_tx_rows)
 
                     # Ações de Gerenciamento: Liquidar e Excluir
-                    with st.expander("✅ Liquidar Lançamentos (Marcar como Pago/Liquidado)", expanded=False):
+                    with st.expander(
+                        "✅ Liquidar Lançamentos (Marcar como Pago/Liquidado)",
+                        expanded=False,
+                    ):
                         st.caption(
                             "Marque como liquidada uma ou mais transações pendentes selecionadas na tabela acima, "
                             "ou selecione uma avulsa abaixo. Ao liquidar, o valor é debitado/creditado no saldo da conta."
                         )
 
-                        pending_selected_rows = selected_tx_rows[selected_tx_rows["Status"] == "Pendente"]
+                        pending_selected_rows = selected_tx_rows[
+                            selected_tx_rows["Status"] == "Pendente"
+                        ]
                         pending_sel_count = len(pending_selected_rows)
 
                         if pending_sel_count > 0:
@@ -354,7 +361,9 @@ def main():
                                 key=f"select_tx_clear_{selected_acc['id']}",
                             )
                             if selected_pending_label:
-                                chosen_clear_tx = pending_options[selected_pending_label]
+                                chosen_clear_tx = pending_options[
+                                    selected_pending_label
+                                ]
                                 col_clr_btn, _ = st.columns([1, 4])
                                 with col_clr_btn:
                                     if st.button(
@@ -377,10 +386,14 @@ def main():
                                                     "Transação liquidada com sucesso!",
                                                 )
                                             )
-                                            st.session_state[statement_state_key] = False
+                                            st.session_state[statement_state_key] = (
+                                                False
+                                            )
                                             st.rerun()
                         else:
-                            st.info("Não há transações pendentes nesta conta no período filtrado.")
+                            st.info(
+                                "Não há transações pendentes nesta conta no período filtrado."
+                            )
 
                     with st.expander("🗑️ Excluir Lançamentos"):
                         st.caption(
@@ -507,7 +520,9 @@ def main():
                 conta_origem_id = st.selectbox(
                     "Conta de Origem",
                     options=list(acc_by_id.keys()),
-                    format_func=lambda aid: f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})",
+                    format_func=lambda aid: (
+                        f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                    ),
                 )
 
             selected_account = acc_by_id.get(conta_origem_id)
@@ -543,14 +558,14 @@ def main():
 
                 conta_dest_id = None
                 if tipo == "Transferência":
-                    dest_options = [
-                        aid for aid in acc_by_id if aid != conta_origem_id
-                    ]
+                    dest_options = [aid for aid in acc_by_id if aid != conta_origem_id]
                     if dest_options:
                         conta_dest_id = st.selectbox(
                             "Conta de Destino",
                             options=dest_options,
-                            format_func=lambda aid: f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})",
+                            format_func=lambda aid: (
+                                f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                            ),
                         )
 
                 categoria = None
@@ -690,7 +705,9 @@ def main():
             selected_acc_id = st.selectbox(
                 "💳 Conta de Destino das Despesas",
                 options=account_ids,
-                format_func=lambda aid: f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})",
+                format_func=lambda aid: (
+                    f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                ),
                 key="select_invoice_acc_top",
                 on_change=_sync_from_top_acc,
             )
@@ -1021,7 +1038,9 @@ def main():
                     bottom_acc_id = st.selectbox(
                         "💳 Confirmar Conta de Destino para Importação",
                         options=account_ids,
-                        format_func=lambda aid: f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})",
+                        format_func=lambda aid: (
+                            f"{acc_by_id[aid]['name']} ({acc_by_id[aid]['account_type'].upper()})"
+                        ),
                         key="select_invoice_acc_bottom",
                         on_change=_sync_from_bottom_acc,
                     )
@@ -1502,7 +1521,9 @@ def main():
                     selected_edit_acc_id = st.selectbox(
                         "Selecione a Conta",
                         list(all_acc_by_id.keys()),
-                        format_func=lambda aid: f"{all_acc_by_id[aid]['name']} ({all_acc_by_id[aid]['account_type'].upper()})",
+                        format_func=lambda aid: (
+                            f"{all_acc_by_id[aid]['name']} ({all_acc_by_id[aid]['account_type'].upper()})"
+                        ),
                         key="select_acc_to_edit",
                     )
                 target_acc = all_acc_by_id[selected_edit_acc_id]

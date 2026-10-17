@@ -167,9 +167,7 @@ class InMemoryTransactionRepository(ITransactionRepository):
         self.transactions[transaction.id] = transaction
         return transaction
 
-    async def delete(
-        self, transaction_id: UUID, user_id: UUID | None = None
-    ) -> bool:
+    async def delete(self, transaction_id: UUID, user_id: UUID | None = None) -> bool:
         if transaction_id in self.transactions:
             if user_id and self.transactions[transaction_id].user_id != user_id:
                 return False
@@ -690,5 +688,3 @@ async def test_clear_transaction_use_case_and_user_isolation():
     assert (await account_repo.get_by_id(acc.id, user_id=user1)).balance == Decimal(
         "0.00"
     )
-
-
