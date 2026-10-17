@@ -20,6 +20,15 @@ class GoogleAuthInput(BaseModel):
     avatar_url: str | None = None
 
 
+class KeycloakAuthInput(BaseModel):
+    keycloak_id: str
+    email: EmailStr
+    username: str
+    name: str
+    roles: list[str] = Field(default_factory=list)
+    avatar_url: str | None = None
+
+
 class ApproveUserInput(BaseModel):
     user_id: str
     approve: bool = True

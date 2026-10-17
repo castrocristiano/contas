@@ -21,6 +21,14 @@ class Settings(BaseSettings):
     google_client_secret: str = ""
     google_redirect_uri: str = "http://localhost:8501"
 
+    # Keycloak OIDC / OAuth 2.0
+    keycloak_server_url: str = "http://localhost:8180"
+    keycloak_internal_url: str = ""
+    keycloak_realm: str = "contas"
+    keycloak_client_id: str = "contas-app"
+    keycloak_client_secret: str = ""
+    keycloak_redirect_uri: str = "http://localhost:8501"
+
     @property
     def effective_openai_api_key(self) -> str:
         import os

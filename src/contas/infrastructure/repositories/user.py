@@ -117,6 +117,8 @@ class SQLAlchemyUserRepository(IUserRepository):
                 raise ValueError(f"User {user.id} not found")
 
             orm.name = user.name
+            orm.auth_provider = user.auth_provider
+            orm.google_id = user.google_id
             orm.is_active = user.is_active
             orm.is_approved = user.is_approved
             orm.role = user.role

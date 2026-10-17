@@ -6,53 +6,92 @@ from contas.domain.errors import (
     InvalidCredentialsError,
     UserAlreadyExistsError,
 )
-from contas.security.oauth_google import GoogleOAuthService
+from contas.security.oauth_keycloak import KeycloakOAuthService
 from contas.ui.services import UIService
 
 
-def _handle_google_callback() -> None:
-    """Detects and processes Google OAuth 2.0 authorization code in query params."""
-    code = st.query_params.get("code")
-    if not code:
-        return
-
-    oauth_svc = GoogleOAuthService(
-        client_id=settings.google_client_id,
-        client_secret=settings.google_client_secret,
-        redirect_uri=settings.google_redirect_uri,
-    )
-    if not oauth_svc.is_configured:
-        return
-
+def _get_keycloak_service() -> KeycloakOAuthService:
+    server_url = settings.keycloak_server_url
+    redirect_uri = settings.keycloak_redirect_uri
     try:
-        user_info = oauth_svc.exchange_code_for_user_info(code)
-        # Clear query params
-        st.query_params.clear()
+        headers = st.context.headers
+        host_header = headers.get("Host") or headers.get("host") or ""
+        hostname = host_header.split(":")[0].strip()
+        if hostname and hostname not in ("localhost", "127.0.0.1"):
+            if "localhost" in server_url:
+                server_url = server_url.replace("localhost", hostname)
+            if "localhost" in redirect_uri:
+                redirect_uri = redirect_uri.replace("localhost", hostname)
+    except Exception:  # noqa: BLE001, S110
+        pass
 
-        user = UIService.google_oauth(
-            google_id=user_info.google_id,
+    return KeycloakOAuthService(
+        server_url=server_url,
+        internal_url=settings.keycloak_internal_url,
+        realm=settings.keycloak_realm,
+        client_id=settings.keycloak_client_id,
+        client_secret=settings.keycloak_client_secret,
+        redirect_uri=redirect_uri,
+    )
+
+
+def _handle_keycloak_callback(keycloak_svc: KeycloakOAuthService) -> None:
+    """Detects and processes Keycloak OIDC authorization code in query params."""
+    code = st.query_params.get("code")
+    if not code or not keycloak_svc.is_configured:
+        return
+    try:
+        user_info = keycloak_svc.exchange_code_for_user_info(code)
+        st.query_params.clear()
+        user = UIService.keycloak_oauth(
+            keycloak_id=user_info.sub,
             email=user_info.email,
+            username=user_info.username,
             name=user_info.name,
+            roles=user_info.roles,
             avatar_url=user_info.avatar_url,
         )
-
         st.session_state["user"] = user
         st.session_state["authenticated"] = True
-        st.success(f"Conectado com sucesso via Google, {user['name']}!")
+        st.success(f"Conectado com sucesso via Keycloak, {user['name']}!")
         st.rerun()
     except AccountPendingApprovalError:
         st.query_params.clear()
         st.warning(
-            "⏳ Sua conta Google foi registrada, mas ainda está **aguardando aprovação do administrador** para liberar o acesso."
+            "⏳ Sua conta Keycloak foi registrada, mas ainda está **aguardando aprovação do administrador** para liberar o acesso."
         )
     except Exception as exc:  # noqa: BLE001
         st.query_params.clear()
-        st.error(f"Erro ao autenticar com o Google: {exc}")
+        st.error(f"Erro ao autenticar com o Keycloak: {exc}")
+
+
+def _authenticate_credentials(
+    identifier: str, password: str, keycloak_svc: KeycloakOAuthService
+) -> dict:
+    """Authenticates via Keycloak Direct Grant first (if configured), falling back to local DB."""
+    if keycloak_svc.is_configured:
+        try:
+            kc_info = keycloak_svc.authenticate_with_password(identifier, password)
+            return UIService.keycloak_oauth(
+                keycloak_id=kc_info.sub,
+                email=kc_info.email,
+                username=kc_info.username,
+                name=kc_info.name,
+                roles=kc_info.roles,
+                avatar_url=kc_info.avatar_url,
+            )
+        except AccountPendingApprovalError:
+            raise
+        except Exception:  # noqa: BLE001, S110
+            pass
+
+    return UIService.authenticate_user(identifier=identifier, password=password)
 
 
 def render_auth_view() -> None:
-    """Renders the Login and Registration screens in Streamlit."""
-    _handle_google_callback()
+    """Renders the Login and Registration screens in Streamlit integrated with Keycloak."""
+    keycloak_svc = _get_keycloak_service()
+    _handle_keycloak_callback(keycloak_svc)
 
     st.markdown(
         "<div style='text-align: center; margin-bottom: 2rem;'>"
@@ -62,13 +101,13 @@ def render_auth_view() -> None:
         unsafe_allow_html=True,
     )
 
-    oauth_svc = GoogleOAuthService(
-        client_id=settings.google_client_id,
-        client_secret=settings.google_client_secret,
-        redirect_uri=settings.google_redirect_uri,
+    keycloak_configured = keycloak_svc.is_configured
+    keycloak_auth_url = (
+        keycloak_svc.get_authorization_url() if keycloak_configured else "#"
     )
-    google_configured = oauth_svc.is_configured
-    google_auth_url = oauth_svc.get_authorization_url() if google_configured else "#"
+    keycloak_reg_url = (
+        keycloak_svc.get_registration_url() if keycloak_configured else "#"
+    )
 
     _, center_col, _ = st.columns([1, 2, 1])
     with center_col:
@@ -77,21 +116,16 @@ def render_auth_view() -> None:
         with tab_login:
             st.subheader("Login no Sistema")
 
-            # Google Login Button
-            if google_configured:
+            if keycloak_configured:
                 st.link_button(
-                    "🌐 Entrar com o Google",
-                    google_auth_url,
+                    "🔐 Entrar com Keycloak (SSO)",
+                    keycloak_auth_url,
                     use_container_width=True,
                     type="secondary",
                 )
                 st.markdown(
-                    "<div style='text-align: center; margin: 0.8rem 0; color: gray;'>ou</div>",
+                    "<div style='text-align: center; margin: 0.8rem 0; color: gray;'>ou acesse diretamente abaixo</div>",
                     unsafe_allow_html=True,
-                )
-            else:
-                st.caption(
-                    "ℹ️ Para ativar o login com o Google, defina `GOOGLE_CLIENT_ID` e `GOOGLE_CLIENT_SECRET` no arquivo `.env`."
                 )
 
             with st.form("form_login"):
@@ -108,9 +142,10 @@ def render_auth_view() -> None:
                     st.error("Preencha usuário/e-mail e senha.")
                 else:
                     try:
-                        user = UIService.authenticate_user(
+                        user = _authenticate_credentials(
                             identifier=login_ident.strip(),
                             password=login_pass,
+                            keycloak_svc=keycloak_svc,
                         )
                         st.session_state["user"] = user
                         st.session_state["authenticated"] = True
@@ -129,10 +164,10 @@ def render_auth_view() -> None:
             st.subheader("Novo Cadastro")
             st.caption("Novas contas passam por aprovação prévia do administrador.")
 
-            if google_configured:
+            if keycloak_configured:
                 st.link_button(
-                    "🌐 Cadastrar com o Google",
-                    google_auth_url,
+                    "🔐 Cadastrar via Keycloak",
+                    keycloak_reg_url,
                     use_container_width=True,
                     type="secondary",
                 )

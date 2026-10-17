@@ -85,6 +85,31 @@ class UIService:
         )
 
     @staticmethod
+    def keycloak_oauth(
+        keycloak_id: str,
+        email: str,
+        username: str,
+        name: str,
+        roles: list[str] | None = None,
+        avatar_url: str | None = None,
+    ) -> dict:
+        container = get_container()
+        from contas.schemas.user import KeycloakAuthInput
+
+        return run_async(
+            container.keycloak_oauth_uc.execute(
+                KeycloakAuthInput(
+                    keycloak_id=keycloak_id,
+                    email=email,
+                    username=username,
+                    name=name,
+                    roles=roles or [],
+                    avatar_url=avatar_url,
+                )
+            )
+        )
+
+    @staticmethod
     def approve_user(user_id: str, approve: bool = True) -> dict:
         container = get_container()
         from contas.schemas.user import ApproveUserInput
