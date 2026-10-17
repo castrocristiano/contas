@@ -54,8 +54,8 @@ jobs:
       - name: Run Ruff Linter
         run: uv run ruff check .
 
-      - name: Run Ruff Formatter Check
-        run: uv run ruff format --check .
+      - name: Run Ruff Formatter Check & Generate SonarQube Reports
+        run: uv run python .agents/skills/formatter/scripts/sonar_formatter_check.py
 
       - name: Run Database Migrations
         env:
@@ -66,11 +66,14 @@ jobs:
         env:
           DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
         run: uv run pytest -v --cov=src/contas --cov-report=xml:coverage.xml
-      - name: Upload Coverage Report Artifact
+      - name: Upload Coverage & Formatter Report Artifacts
         uses: actions/upload-artifact@v4
         with:
           name: coverage-report
-          path: coverage.xml
+          path: |
+            coverage.xml
+            ruff-report.json
+            sonar-formatter-issues.json
           retention-days: 1
 
   # Job dedicado do SonarQube rodando em container no CI
@@ -117,19 +120,27 @@ jobs:
 
       - name: Authenticate and Generate SonarQube Project & Token
         id: sonar-setup
+        env:
+          EXISTING_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
         run: |
-          # Altera a senha inicial padrão do admin (admin -> admin1234)
-          curl -s -u admin:admin -X POST "http://localhost:9000/api/users/change_password?login=admin&previousPassword=admin&password=admin1234" || true
-          
-          # Cria o projeto se ainda não existir
-          curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/projects/create?name=contas&project=contas" || true
-          
-          # Gera um token de análise
-          TOKEN_JSON=$(curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/user_tokens/generate?name=ci-token-$(date +%s)")
-          ANALYSIS_TOKEN=$(echo "$TOKEN_JSON" | grep -Po '"token":"\K[^"]*' || echo "")
-          
-          if [ -z "$ANALYSIS_TOKEN" ]; then
-            ANALYSIS_TOKEN="admin1234"
+          if [ -n "$EXISTING_SONAR_TOKEN" ]; then
+            echo "Usando SONAR_TOKEN prioritário configurado nos secrets..."
+            ANALYSIS_TOKEN="$EXISTING_SONAR_TOKEN"
+            curl -s -u "${ANALYSIS_TOKEN}:" -X POST "http://localhost:9000/api/projects/create?name=contas&project=contas" || true
+          else
+            # Altera a senha inicial padrão do container efêmero do CI (admin -> admin1234)
+            curl -s -u admin:admin -X POST "http://localhost:9000/api/users/change_password?login=admin&previousPassword=admin&password=admin1234" || true
+            
+            # Cria o projeto se ainda não existir
+            curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/projects/create?name=contas&project=contas" || true
+            
+            # Gera um token de análise
+            TOKEN_JSON=$(curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/user_tokens/generate?name=ci-token-$(date +%s)")
+            ANALYSIS_TOKEN=$(echo "$TOKEN_JSON" | grep -Po '"token":"\K[^"]*' || echo "")
+            
+            if [ -z "$ANALYSIS_TOKEN" ]; then
+              ANALYSIS_TOKEN="admin1234"
+            fi
           fi
           
           echo "token=$ANALYSIS_TOKEN" >> $GITHUB_OUTPUT
@@ -145,6 +156,8 @@ jobs:
             -Dsonar.sources=src
             -Dsonar.tests=tests
             -Dsonar.python.coverage.reportPaths=coverage.xml
+            -Dsonar.python.ruff.reportPaths=ruff-report.json
+            -Dsonar.externalIssuesReportPaths=sonar-formatter-issues.json
 
       - name: Validate SonarQube Quality Gate
         uses: SonarSource/sonarqube-quality-gate-action@v1

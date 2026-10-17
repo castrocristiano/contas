@@ -79,6 +79,27 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
             await session.refresh(orm)
             return self._to_domain(orm)
 
+    async def update(self, transaction: DomainTransaction) -> DomainTransaction:
+        async with get_session() as session:
+            query = select(ORMTransaction).where(ORMTransaction.id == transaction.id)
+            if transaction.user_id:
+                query = query.where(ORMTransaction.user_id == transaction.user_id)
+            orm = (await session.exec(query)).first()
+            if not orm:
+                from contas.domain.errors import TransactionNotFoundError
+
+                raise TransactionNotFoundError(str(transaction.id))
+            orm.status = transaction.status
+            orm.amount = transaction.amount
+            orm.description = transaction.description
+            orm.transaction_date = transaction.transaction_date
+            orm.due_date = transaction.due_date
+            orm.category_id = transaction.category_id
+            session.add(orm)
+            await session.commit()
+            await session.refresh(orm)
+            return self._to_domain(orm)
+
     async def create_many(
         self, transactions: list[DomainTransaction]
     ) -> list[DomainTransaction]:

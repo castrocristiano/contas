@@ -6,7 +6,7 @@ O **Contas** atua nativamente como um **MCP Server**, permitindo que assistentes
 
 ---
 
-## 🛠️ Catálogo Completo das 13 Ferramentas MCP
+## 🛠️ Catálogo Completo das 14 Ferramentas MCP
 
 | Ferramenta | Descrição | Principais Parâmetros |
 | :--- | :--- | :--- |
@@ -15,6 +15,7 @@ O **Contas** atua nativamente como um **MCP Server**, permitindo que assistentes
 | `update_account` | Atualiza o nome ou dados cadastrais de uma conta existente | `account_id`, `name`, `account_type` |
 | `delete_account` | Exclui ou desativa conta (com opção cascade para apagar transações) | `account_id`, `force_cascade` |
 | `record_transaction` | Registra receita, despesa, transferência ou compra parcelada | `amount`, `transaction_type`, `source_account_id`, `destination_account_id`, `category_id`, `total_installments` |
+| `clear_transaction` | Liquida uma transação pendente aplicando o impacto no saldo da conta | `transaction_id` |
 | `get_statement` | Retorna o extrato detalhado de uma conta em determinado período | `account_id`, `start_date`, `end_date`, `date_type`, `search` |
 | `get_installment_plan` | Consulta o plano detalhado e o progresso de quitação de uma compra parcelada | `installment_id` |
 | `delete_transaction` | Exclui uma transação ou plano parcelado, revertendo saldos de forma atômica | `transaction_id`, `delete_all_installments` |

@@ -123,7 +123,7 @@ flowchart TD
 
 ## 🔌 Ferramentas MCP (Model Context Protocol)
 
-O servidor MCP expõe **13 ferramentas tipadas** que permitem a qualquer IA interagir com as finanças:
+O servidor MCP expõe **14 ferramentas tipadas** que permitem a qualquer IA interagir com as finanças:
 
 ```text
 contas-server (MCP)
@@ -132,6 +132,7 @@ contas-server (MCP)
 ├── update_account           -> Edita dados ou renomeia a conta
 ├── delete_account           -> Exclui ou desativa conta (com opção cascade)
 ├── record_transaction       -> Registra receita, despesa, transferência ou parcelamento
+├── clear_transaction        -> Liquida transação pendente aplicando o impacto no saldo
 ├── get_statement            -> Extrato financeiro filtrado por período e tipo de data
 ├── get_installment_plan     -> Consulta status e parcelas de compras parceladas
 ├── delete_transaction       -> Exclui transações com reversão atômica de saldos

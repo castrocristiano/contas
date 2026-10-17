@@ -29,8 +29,9 @@ def test_calculate_installments_single_installment():
 
 
 def test_calculate_installments_invalid_count():
+    total = Decimal("100.00")
     with pytest.raises(ValueError):
-        calculate_installments(Decimal("100.00"), 0)
+        calculate_installments(total, 0)
 
 
 def test_add_months_regular():
