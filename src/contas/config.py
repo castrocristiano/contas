@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     keycloak_client_secret: str = ""
     keycloak_redirect_uri: str = "http://localhost:8501"
 
+    # Session & Cookies
+    secret_key: str = "contas-app-super-secret-key-change-in-production"
+    session_cookie_name: str = "contas_session"
+    session_cookie_expire_days: int = 7
+
     @property
     def effective_openai_api_key(self) -> str:
         import os

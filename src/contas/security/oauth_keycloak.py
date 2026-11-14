@@ -117,16 +117,31 @@ class KeycloakOAuthService:
         }
         return f"{self._public_oidc_base}/logout?{urllib.parse.urlencode(params)}"
 
-    def _build_user_info(self, access_token: str) -> KeycloakUserInfo:
+    def _fetch_userinfo(self, access_token: str, has_jwt_sub: bool) -> dict:
         import requests
 
-        jwt_claims = _decode_jwt_payload(access_token)
         headers = {"Authorization": f"Bearer {access_token}"}
-        userinfo_resp = requests.get(
-            f"{self._internal_oidc_base}/userinfo", headers=headers, timeout=10
-        )
-        userinfo_resp.raise_for_status()
-        info = userinfo_resp.json()
+        try:
+            userinfo_resp = requests.get(
+                f"{self._internal_oidc_base}/userinfo", headers=headers, timeout=10
+            )
+            if not has_jwt_sub:
+                userinfo_resp.raise_for_status()
+            if getattr(userinfo_resp, "ok", True):
+                data = userinfo_resp.json()
+                return data if isinstance(data, dict) else {}
+            return {}
+        except Exception:
+            if not has_jwt_sub:
+                raise
+            return {}
+
+    def _build_user_info(
+        self, access_token: str, id_token: str = ""
+    ) -> KeycloakUserInfo:
+        id_claims = _decode_jwt_payload(id_token) if id_token else {}
+        jwt_claims = {**id_claims, **_decode_jwt_payload(access_token)}
+        info = self._fetch_userinfo(access_token, bool(jwt_claims.get("sub")))
 
         merged = {**jwt_claims, **info}
         sub = str(merged.get("sub") or "")
@@ -174,7 +189,8 @@ class KeycloakOAuthService:
         if not access_token:
             raise ValueError("Falha ao obter access_token do Keycloak.")
 
-        return self._build_user_info(access_token)
+        id_token = str(token_json.get("id_token") or "")
+        return self._build_user_info(access_token, id_token=id_token)
 
     def authenticate_with_password(
         self, username: str, password: str
@@ -201,4 +217,5 @@ class KeycloakOAuthService:
         if not access_token:
             raise ValueError("Falha ao obter access_token do Keycloak.")
 
-        return self._build_user_info(access_token)
+        id_token = str(token_json.get("id_token") or "")
+        return self._build_user_info(access_token, id_token=id_token)
