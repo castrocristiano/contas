@@ -29,8 +29,8 @@ flowchart TD
     end
 
     subgraph QualityPipeline["2. Validação Obrigatória com contas-ci (Go Runner)"]
-        BuildTest["Job: build-and-test<br>- Setup Go 1.23 + uv (Python 3.12)<br>- go run ./tools/ci/cmd/ci check<br>  (Linter, Formatter, Migrations & Pytest)<br>- Upload de Artefatos (coverage.xml, ruff reports)"]
-        SonarGate["Job: sonarqube<br>- go run ./tools/ci/cmd/ci sonar<br>- Health Check & Token Setup<br>- SonarScanner Container<br>- Avaliação do Quality Gate"]
+        BuildTest["Job: build-and-test<br>- Setup Go 1.23 + uv (Python 3.12)<br>- Build contas-ci CLI<br>- ./bin/contas-ci check<br>  (Linter, Formatter, Migrations & Pytest)<br>- Upload de Artefatos (coverage.xml, ruff reports)"]
+        SonarGate["Job: sonarqube<br>- Build contas-ci CLI<br>- ./bin/contas-ci sonar<br>- Health Check & Token Setup<br>- SonarScanner Container<br>- Avaliação do Quality Gate"]
         BuildTest --> SonarGate
     end
 
