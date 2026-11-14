@@ -59,10 +59,14 @@ jobs:
           go-version: '1.23'
           cache-dependency-path: tools/ci/go.sum
 
+      - name: Build contas-ci CLI
+        run: |
+          cd tools/ci && go build -o ../../bin/contas-ci ./cmd/ci
+
       - name: Run Build, Validation, and Tests via contas-ci
         env:
           DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
-        run: go run ./tools/ci/cmd/ci check
+        run: ./bin/contas-ci check
       - name: Upload Coverage & Formatter Report Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -108,11 +112,15 @@ jobs:
           go-version: '1.23'
           cache-dependency-path: tools/ci/go.sum
 
+      - name: Build contas-ci CLI
+        run: |
+          cd tools/ci && go build -o ../../bin/contas-ci ./cmd/ci
+
       - name: Run SonarQube Scan and Quality Gate via contas-ci
         env:
           SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: "http://localhost:9000"
-        run: go run ./tools/ci/cmd/ci sonar --sonar-url "http://localhost:9000"
+        run: ./bin/contas-ci sonar --sonar-url "http://localhost:9000"
 
   # Abre PR de branch de fase ou feature → develop (após build bem-sucedido e aprovação no SonarQube)
   auto-pr-to-develop:
