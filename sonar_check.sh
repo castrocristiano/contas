@@ -12,6 +12,8 @@
 
 set -euo pipefail
 
+export PATH="$HOME/.local/bin:$PATH"
+
 PROJECT_KEY="contas"
 PROJECT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
@@ -125,7 +127,13 @@ python3 .agents/skills/formatter/scripts/sonar_formatter_check.py --container-pr
 
 # 4. Executa os testes locais com cobertura
 echo "🧪 Executando testes unitários e gerando relatório de cobertura..."
-uv run pytest -v tests/ --cov=src/contas --cov-report=xml:coverage.xml
+if command -v uv &> /dev/null; then
+    uv run pytest -v tests/unit/ --cov=src/contas --cov-report=xml:coverage.xml
+elif [ -f .venv/bin/pytest ]; then
+    .venv/bin/pytest -v tests/unit/ --cov=src/contas --cov-report=xml:coverage.xml
+else
+    pytest -v tests/unit/ --cov=src/contas --cov-report=xml:coverage.xml
+fi
 
 # Ajusta caminhos no coverage.xml para mapear com o container do scanner
 sed -i "s|/home/cristiano/Dev/contas/src|/usr/src/src|g" coverage.xml
