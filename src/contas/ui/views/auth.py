@@ -53,6 +53,9 @@ def _handle_keycloak_callback(keycloak_svc: KeycloakOAuthService) -> None:
         )
         st.session_state["user"] = user
         st.session_state["authenticated"] = True
+        from contas.security.session import create_session_token
+
+        st.session_state["_set_session_token"] = create_session_token(user["id"])
         st.success(f"Conectado com sucesso via Keycloak, {user['name']}!")
         st.rerun()
     except AccountPendingApprovalError:
@@ -149,6 +152,11 @@ def render_auth_view() -> None:
                         )
                         st.session_state["user"] = user
                         st.session_state["authenticated"] = True
+                        from contas.security.session import create_session_token
+
+                        st.session_state["_set_session_token"] = create_session_token(
+                            user["id"]
+                        )
                         st.success(f"Bem-vindo(a), {user['name']}!")
                         st.rerun()
                     except AccountPendingApprovalError:

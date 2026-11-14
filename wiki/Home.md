@@ -40,12 +40,13 @@ Para explorar os detalhes do sistema, navegue pelos capítulos abaixo ou utilize
    - Passo a passo para execução local com `uv` e migrações com Alembic.
 
 6. [📐 **06. Metodologia Spec-Driven**](06-Metodologia-Spec-Driven)
-   - Como o projeto é guiado pela metodologia Spec Kit (`specs/001` a `021`).
+   - Como o projeto é guiado pela metodologia Spec Kit (`specs/001` a `022`).
    - Ciclo de vida: Especificação (`spec.md`), Planejamento (`plan.md`), Tarefas (`tasks.md`) e Implementação.
    - Skills e Regras do Agente (`.agents/skills/formatter` e `.agents/rules/formatter.md`).
 
-7. [🔄 **07. Gitflow, CI/CD e Qualidade (SonarQube)**](07-Gitflow-e-CI-CD)
+7. [🔄 **07. Gitflow, CI/CD e Qualidade (SonarQube & Go Runner)**](07-Gitflow-e-CI-CD)
    - Estratégia de branches (`main`, `develop`, `feature/*`, `phase/*` e `hotfix/*`).
+   - Ferramenta unificada de CI/CD em Go (`contas-ci`) executável nativamente ou via container Podman isolado.
    - Fluxo de Pull Requests automatizados (`feature/* → develop → main` e `hotfix/* → main`).
    - Geração automática de Releases no GitHub e Quality Gate do SonarQube (`SONAR_TOKEN`).
 
@@ -54,9 +55,10 @@ Para explorar os detalhes do sistema, navegue pelos capítulos abaixo ou utilize
 ## 💡 Informações Rápidas
 
 - **Autor**: [Cristiano Castro](https://github.com/castrocristiano)
-- **Linguagem**: Python 3.12+
+- **Linguagem**: Python 3.12+ & Go 1.23+ (CI/CD Tooling)
 - **Protocolo de IA**: Model Context Protocol (MCP)
 - **Identidade & Auth**: Keycloak 26 (OIDC) + bcrypt
 - **Interface**: Streamlit
 - **Banco de Dados**: PostgreSQL 16
+- **Conteinerização**: Podman / Docker
 - **Licença**: GNU GPLv3

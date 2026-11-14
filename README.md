@@ -123,6 +123,7 @@ flowchart TD
 | **Banco de Dados** | [PostgreSQL 16](https://www.postgresql.org/) | Banco de dados transacional relacional com conformidade ACID |
 | **Migrações** | [Alembic](https://alembic.sqlalchemy.org/) | Versionamento e evolução estruturada do esquema do banco |
 | **Qualidade & Linter** | [SonarQube](https://www.sonarsource.com/products/sonarqube/) & [Ruff](https://docs.astral.sh/ruff/) | Quality Gate automatizado, cobertura de testes e regra estrita de Formatter |
+| **Automação & CI/CD** | [Go Lang 1.23+](https://go.dev/) (`contas-ci`) | Runner autônomo do pipeline CI/CD executável nativamente ou via container Podman |
 | **Conteinerização** | [Podman](https://podman.io/) & [Docker](https://www.docker.com/) | Orquestração segura de múltiplos serviços via Compose |
 
 ---
@@ -292,18 +293,30 @@ flowchart LR
 
 ---
 
-## 🧪 Testes Automatizados & Qualidade (SonarQube)
+## 🧪 Testes Automatizados, CI/CD & Qualidade (`contas-ci` em Go)
 
-O projeto possui validação rigorosa de código e testes automatizados:
+O projeto conta com uma ferramenta CLI unificada em Go (`tools/ci`), compilável em um único binário (`contas-ci`), que orquestra a validação completa local e nos pipelines do GitHub Actions com paridade estrita:
 
 ```bash
-# 1. Executar a Regra de Formatter (Ruff Check + Format + Relatórios Sonar)
-python3 .agents/skills/formatter/scripts/sonar_formatter_check.py --fix
+# Execução local 100% via container Podman (sem precisar de Go instalado na máquina):
+./tools/ci/run_in_container.sh sh -c "cd tools/ci && go build -o ../../bin/contas-ci ./cmd/ci"
 
-# 2. Executar toda a suíte de testes unitários e de integração (130+ testes)
-uv run pytest
+# 1. Executar a validação local completa (Ruff linter, formatação e testes com cobertura)
+./bin/contas-ci check
 
-# 3. Executar análise completa no SonarQube (priorizando SONAR_TOKEN) e validar Quality Gate
+# 2. Executar checagens específicas
+./bin/contas-ci lint          # Apenas checagem estática com Ruff
+./bin/contas-ci format-check  # Apenas checagem de formatação e relatórios Sonar
+./bin/contas-ci test          # Migrações e testes unitários com coverage.xml
+
+# 3. Executar o ciclo completo do SonarQube e validar o Quality Gate
+./bin/contas-ci sonar --sonar-url "http://192.168.1.20:9000"
+
+# 4. Executar tudo de ponta a ponta (check + sonar)
+./bin/contas-ci all
+
+# O script clássico ./sonar_check.sh permanece disponível como wrapper compatível:
+# (Se Go não estiver no host, ele executa automaticamente via container Podman)
 ./sonar_check.sh
 ```
 

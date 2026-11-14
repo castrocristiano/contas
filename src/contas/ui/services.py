@@ -126,6 +126,30 @@ class UIService:
         return run_async(container.list_users_uc.execute())
 
     @staticmethod
+    def get_user_by_id(user_id: UUID | str) -> dict | None:
+        async def _get() -> dict | None:
+            uid = user_id if isinstance(user_id, UUID) else UUID(str(user_id))
+            from contas.infrastructure.repositories.user import SQLAlchemyUserRepository
+
+            repo = SQLAlchemyUserRepository()
+            user = await repo.get_by_id(uid)
+            if not user:
+                return None
+            return {
+                "id": str(user.id),
+                "name": user.name,
+                "email": user.email,
+                "username": user.username,
+                "role": user.role,
+                "is_active": user.is_active,
+                "is_approved": user.is_approved,
+                "avatar_url": user.avatar_url,
+                "auth_provider": user.auth_provider,
+            }
+
+        return run_async(_get())
+
+    @staticmethod
     def change_password(user_id: str, current_password: str, new_password: str) -> dict:
         container = get_container()
         from contas.schemas.user import ChangePasswordInput
