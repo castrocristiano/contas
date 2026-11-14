@@ -60,3 +60,14 @@ coverage.xml
 ruff-report.json
 sonar-formatter-issues.json
 .sonarlint/
+
+# Go Binaries & Cache
+bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
