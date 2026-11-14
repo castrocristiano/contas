@@ -81,15 +81,20 @@ uv run streamlit run src/contas/ui/app.py
 
 ---
 
-## 🧪 Suíte de Testes, Formatter e SonarQube
+## 🧪 Suíte de Testes, Qualidade & CI/CD (`contas-ci`)
+
+A validação de código, testes e análise de qualidade são orquestrados pela ferramenta CLI em Go (`contas-ci`), executável nativamente ou de forma 100% isolada através de um container Podman:
 
 ```bash
-# 1. Validar e corrigir formatação (Skill Formatter)
-python3 .agents/skills/formatter/scripts/sonar_formatter_check.py --fix
+# 1. Compilar o binário contas-ci isoladamente pelo container Podman (sem precisar de Go no host):
+./tools/ci/run_in_container.sh sh -c "cd tools/ci && go build -o ../../bin/contas-ci ./cmd/ci"
 
-# 2. Executar todos os testes automatizados
-uv run pytest
+# 2. Executar a validação local completa (linter, formatação e testes com cobertura):
+./bin/contas-ci check
 
-# 3. Executar análise completa no SonarQube (priorizando SONAR_TOKEN)
+# 3. Executar o ciclo completo de análise no SonarQube e validar o Quality Gate:
+./bin/contas-ci sonar --sonar-url "http://192.168.1.20:9000"
+
+# O script clássico ./sonar_check.sh permanece disponível (com fallback automático para Podman se Go não estiver instalado):
 ./sonar_check.sh
 ```

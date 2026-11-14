@@ -53,21 +53,20 @@ jobs:
       - name: Install dependencies
         run: uv sync --all-extras --dev
 
-      - name: Run Ruff Linter
-        run: uv run ruff check .
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.23'
+          cache-dependency-path: tools/ci/go.sum
 
-      - name: Run Ruff Formatter Check & Generate SonarQube Reports
-        run: uv run python .agents/skills/formatter/scripts/sonar_formatter_check.py
+      - name: Build contas-ci CLI
+        run: |
+          cd tools/ci && go build -o ../../bin/contas-ci ./cmd/ci
 
-      - name: Run Database Migrations
+      - name: Run Build, Validation, and Tests via contas-ci
         env:
           DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
-        run: uv run alembic upgrade head
-
-      - name: Run Unit & Integration Tests with Coverage
-        env:
-          DATABASE_URL: postgresql+psycopg://contas:contas@localhost:5432/contas
-        run: uv run pytest -v --cov=src/contas --cov-report=xml:coverage.xml
+        run: ./bin/contas-ci check
       - name: Upload Coverage & Formatter Report Artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -107,66 +106,21 @@ jobs:
         with:
           name: coverage-report
 
-      - name: Wait for SonarQube Server to be fully ready
-        run: |
-          echo "Aguardando inicialização completa do SonarQube..."
-          for i in {1..60}; do
-            STATUS=$(curl -s http://localhost:9000/api/system/status | grep -Po '"status":"\K[^"]*' || echo "DOWN")
-            if [ "$STATUS" = "UP" ]; then
-              echo "SonarQube está pronto!"
-              break
-            fi
-            echo "Aguardando SonarQube status UP (status atual: $STATUS)... ($i/60)"
-            sleep 5
-          done
-
-      - name: Authenticate and Generate SonarQube Project & Token
-        id: sonar-setup
-        env:
-          EXISTING_SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-        run: |
-          if [ -n "$EXISTING_SONAR_TOKEN" ]; then
-            echo "Usando SONAR_TOKEN prioritário configurado nos secrets..."
-            ANALYSIS_TOKEN="$EXISTING_SONAR_TOKEN"
-            curl -s -u "${ANALYSIS_TOKEN}:" -X POST "http://localhost:9000/api/projects/create?name=contas&project=contas" || true
-          else
-            # Altera a senha inicial padrão do container efêmero do CI (admin -> admin1234)
-            curl -s -u admin:admin -X POST "http://localhost:9000/api/users/change_password?login=admin&previousPassword=admin&password=admin1234" || true
-            
-            # Cria o projeto se ainda não existir
-            curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/projects/create?name=contas&project=contas" || true
-            
-            # Gera um token de análise
-            TOKEN_JSON=$(curl -s -u admin:admin1234 -X POST "http://localhost:9000/api/user_tokens/generate?name=ci-token-$(date +%s)")
-            ANALYSIS_TOKEN=$(echo "$TOKEN_JSON" | grep -Po '"token":"\K[^"]*' || echo "")
-            
-            if [ -z "$ANALYSIS_TOKEN" ]; then
-              ANALYSIS_TOKEN="admin1234"
-            fi
-          fi
-          
-          echo "token=$ANALYSIS_TOKEN" >> $GITHUB_OUTPUT
-
-      - name: SonarQube Community Container Scanner
-        uses: SonarSource/sonarqube-scan-action@v5
-        env:
-          SONAR_TOKEN: ${{ steps.sonar-setup.outputs.token }}
-          SONAR_HOST_URL: "http://localhost:9000"
+      - name: Set up Go
+        uses: actions/setup-go@v5
         with:
-          args: >
-            -Dsonar.projectKey=contas
-            -Dsonar.sources=src
-            -Dsonar.tests=tests
-            -Dsonar.python.coverage.reportPaths=coverage.xml
-            -Dsonar.python.ruff.reportPaths=ruff-report.json
-            -Dsonar.externalIssuesReportPaths=sonar-formatter-issues.json
+          go-version: '1.23'
+          cache-dependency-path: tools/ci/go.sum
 
-      - name: Validate SonarQube Quality Gate
-        uses: SonarSource/sonarqube-quality-gate-action@v1
-        timeout-minutes: 5
+      - name: Build contas-ci CLI
+        run: |
+          cd tools/ci && go build -o ../../bin/contas-ci ./cmd/ci
+
+      - name: Run SonarQube Scan and Quality Gate via contas-ci
         env:
-          SONAR_TOKEN: ${{ steps.sonar-setup.outputs.token }}
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
           SONAR_HOST_URL: "http://localhost:9000"
+        run: ./bin/contas-ci sonar --sonar-url "http://localhost:9000"
 
   # Abre PR de branch de fase ou feature → develop (após build bem-sucedido e aprovação no SonarQube)
   auto-pr-to-develop:
