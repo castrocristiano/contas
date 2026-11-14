@@ -47,14 +47,49 @@ def run_app():
 
 def main():
     # -------------------------------------------------------------
-    # INTERCEPTOR DE AUTENTICAÇÃO
+    # INTERCEPTOR DE AUTENTICAÇÃO E SESSÃO PERSISTENTE
     # -------------------------------------------------------------
+    from contas.security.session import (
+        create_session_token,
+        render_clear_cookie_script,
+        render_set_cookie_script,
+        verify_session_token,
+    )
     from contas.ui.views.auth import render_auth_view
 
     current_user = st.session_state.get("user")
     if not current_user or not st.session_state.get("authenticated"):
+        cookies = getattr(st.context, "cookies", {}) or {}
+        raw_token = cookies.get(settings.session_cookie_name)
+        if raw_token:
+            user_id = verify_session_token(raw_token)
+            if user_id:
+                try:
+                    user_data = UIService.get_user_by_id(user_id)
+                    if (
+                        user_data
+                        and user_data.get("is_active")
+                        and user_data.get("is_approved")
+                    ):
+                        st.session_state["user"] = user_data
+                        st.session_state["authenticated"] = True
+                        current_user = user_data
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning("Falha ao restaurar sessão pelo cookie: %s", exc)
+
+    if not current_user or not st.session_state.get("authenticated"):
         render_auth_view()
         return
+
+    # Garante que o cookie de sessão está gravado no navegador
+    pending_token = st.session_state.pop("_set_session_token", None)
+    if pending_token:
+        render_set_cookie_script(pending_token)
+    else:
+        cookies = getattr(st.context, "cookies", {}) or {}
+        if not cookies.get(settings.session_cookie_name) and current_user.get("id"):
+            token = create_session_token(current_user["id"])
+            render_set_cookie_script(token)
 
     current_user_id = UUID(current_user["id"])
     user_role = current_user.get("role", "user")
@@ -65,6 +100,7 @@ def main():
     st.sidebar.caption(f"{role_badge} • @{current_user['username']}")
     if st.sidebar.button("🚪 Sair (Logout)", use_container_width=True):
         st.session_state.clear()
+        render_clear_cookie_script()
         st.rerun()
 
     st.sidebar.divider()
