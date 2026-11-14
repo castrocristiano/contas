@@ -34,20 +34,20 @@ flowchart TD
         BuildTest --> SonarGate
     end
 
+    subgraph GitflowActions["3. Automação Gitflow"]
+        AutoPRDev["Job: auto-pr-to-develop<br>Cria PR: feature/* → develop"]
+        AutoPRMain["Job: auto-pr-to-main<br>Cria PR: develop → main ou hotfix/* → main"]
+        ReleaseMain["Job: release-on-main<br>- Análise SemVer & Breaking Changes<br>- Bump no pyproject.toml<br>- Publicação de Release v*"]
+    end
+
     FeatBranch --> BuildTest
     DevBranch --> BuildTest
     HotfixBranch --> BuildTest
     MainBranch --> BuildTest
 
-    subgraph AutomationJobs["3. Automação de PRs e Releases (Somente se Quality Gate = OK)"]
-        PRToDev["Job: auto-pr-to-develop<br>Abre PR: feature/* → develop"]
-        PRToMain["Job: auto-pr-to-main<br>Abre PR: develop → main<br>ou hotfix/* → main"]
-        ReleaseJob["Job: release-on-main<br>Gera Tag & GitHub Release<br>(v0.1.0-N ou bump MAJOR)"]
-    end
-
-    SonarGate -->|Se push em feature/* ou phase/*| PRToDev
-    SonarGate -->|Se push em develop ou hotfix*| PRToMain
-    SonarGate -->|Se push/merge em main| ReleaseJob
+    SonarGate -->|Se branch for feature/* ou phase/*| AutoPRDev
+    SonarGate -->|Se branch for develop ou hotfix/*| AutoPRMain
+    SonarGate -->|Se push direto na main| ReleaseMain
 ```
 
 ---
