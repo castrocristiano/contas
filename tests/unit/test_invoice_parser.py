@@ -377,3 +377,23 @@ def test_preprocess_invoice_text_empty_and_passthrough():
 
     normal = "15/09/2026 Compra Normal R$ 50,00\nOutra Linha Informativa"
     assert preprocess_invoice_text(normal) == normal
+
+
+def test_preprocess_invoice_text_run_on_transactions_and_past_dates():
+    from contas.services.invoice_parser import preprocess_invoice_text
+
+    run_on_block = (
+        "04/10 LOJAS PALUDO L 09/10 17,47 vestuário CAMPO BOM "
+        "18/10 LOJAS PALUDO L 09/10 9,99 vestuário CAMPO BOM "
+        "19/05 HealthMediaInc 02/03 303,33 lazer Rio de Janeir "
+        "23/05 YICE XUCAMPO B 02/03 53,33 vestuário CAMPO BOM "
+        "10/06 DL*UberRidesSao PauloBR 10,94 transporte Sao Paulo"
+    )
+
+    processed = preprocess_invoice_text(run_on_block)
+    lines = processed.split("\n")
+
+    assert len(lines) == 5
+    assert any("HealthMediaInc" in line and "19/05" in line for line in lines)
+    assert any("LOJAS PALUDO" in line and "04/10" in line for line in lines)
+    assert any("UberRides" in line and "10/06" in line for line in lines)
