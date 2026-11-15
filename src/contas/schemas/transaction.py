@@ -1,5 +1,6 @@
 from datetime import datetime
 from decimal import Decimal
+from enum import StrEnum
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
@@ -131,6 +132,12 @@ class RecordTransactionResponse(BaseModel):
     created_at: datetime
 
 
+class StatementStatusFilter(StrEnum):
+    ALL = "all"
+    CLEARED = "cleared"
+    PENDING = "pending"
+
+
 class GetStatementInput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -149,6 +156,10 @@ class GetStatementInput(BaseModel):
     include_pending: bool = Field(
         default=False,
         description="If true, includes pending transactions. Default: false.",
+    )
+    status_filter: StatementStatusFilter = Field(
+        default=StatementStatusFilter.ALL,
+        description="Filter by settlement status: 'all', 'cleared', or 'pending'. Defaults to 'all'.",
     )
     limit: int = Field(
         default=50,

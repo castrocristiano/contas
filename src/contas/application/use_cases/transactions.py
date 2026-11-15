@@ -1,3 +1,4 @@
+import calendar
 from datetime import UTC, datetime
 from decimal import Decimal
 from typing import Any
@@ -16,6 +17,11 @@ from contas.domain.errors import (
     InstallmentPlanNotFoundError,
     TransactionNotFoundError,
     TransferSameAccountError,
+)
+from contas.schemas.account import (
+    AccountBalanceProjection,
+    DashboardProjectionsResponse,
+    GetDashboardProjectionsInput,
 )
 from contas.schemas.transaction import (
     ClearTransactionInput,
@@ -235,6 +241,14 @@ class GetStatementUseCase:
         if not account:
             raise AccountNotFoundError(str(payload.account_id))
 
+        status_for_query = None
+        if payload.status_filter == "cleared":
+            status_for_query = "cleared"
+        elif payload.status_filter == "pending":
+            status_for_query = "pending"
+        elif not payload.include_pending:
+            status_for_query = "cleared"
+
         transactions = await self.transaction_repo.list_by_account(
             account_id=payload.account_id,
             user_id=payload.user_id,
@@ -242,9 +256,18 @@ class GetStatementUseCase:
             end_date=e_date,
             date_type=payload.date_type,
             search=payload.search,
+            status_filter=status_for_query,
             limit=payload.limit,
         )
-        if not payload.include_pending:
+        if payload.status_filter == "cleared":
+            transactions = [
+                tx for tx in transactions if tx.status == TransactionStatus.CLEARED
+            ]
+        elif payload.status_filter == "pending":
+            transactions = [
+                tx for tx in transactions if tx.status == TransactionStatus.PENDING
+            ]
+        elif not payload.include_pending:
             transactions = [
                 tx for tx in transactions if tx.status == TransactionStatus.CLEARED
             ]
@@ -527,5 +550,114 @@ class GetFinancialSummaryUseCase:
             accounts=account_items,
             total_assets=f"{total:.2f}",
             currency=currency,
+        )
+        return response.model_dump(mode="json")
+
+
+class GetDashboardProjectionsUseCase:
+    def __init__(
+        self,
+        account_repo: IAccountRepository,
+        transaction_repo: ITransactionRepository,
+    ) -> None:
+        self.account_repo = account_repo
+        self.transaction_repo = transaction_repo
+
+    async def execute(self, payload: GetDashboardProjectionsInput) -> dict[str, Any]:
+        now = datetime.now(UTC)
+        if payload.until_date:
+            try:
+                parsed = datetime.fromisoformat(payload.until_date)
+                until_dt = (
+                    parsed.replace(tzinfo=UTC) if parsed.tzinfo is None else parsed
+                )
+            except ValueError:
+                until_dt = now
+        else:
+            _, last_day = calendar.monthrange(now.year, now.month)
+            until_dt = datetime(now.year, now.month, last_day, 23, 59, 59, tzinfo=UTC)
+
+        accounts = await self.account_repo.list_all(
+            user_id=payload.user_id, only_active=True, limit=1000
+        )
+        pending_txs = await self.transaction_repo.list_pending_by_user(
+            user_id=payload.user_id, until_date=until_dt
+        )
+
+        acc_projections: list[AccountBalanceProjection] = []
+        total_curr = Decimal("0.00")
+        total_p_inc = Decimal("0.00")
+        total_p_exp = Decimal("0.00")
+        total_proj = Decimal("0.00")
+
+        for acc in accounts:
+            curr_bal = acc.balance
+            p_inc = sum(
+                (
+                    t.amount
+                    for t in pending_txs
+                    if t.source_account_id == acc.id
+                    and t.transaction_type == TransactionType.INCOME
+                ),
+                Decimal("0.00"),
+            )
+            p_exp = sum(
+                (
+                    t.amount
+                    for t in pending_txs
+                    if t.source_account_id == acc.id
+                    and t.transaction_type == TransactionType.EXPENSE
+                ),
+                Decimal("0.00"),
+            )
+            transfers_out = sum(
+                (
+                    t.amount
+                    for t in pending_txs
+                    if t.source_account_id == acc.id
+                    and t.transaction_type == TransactionType.TRANSFER
+                ),
+                Decimal("0.00"),
+            )
+            transfers_in = sum(
+                (
+                    t.amount
+                    for t in pending_txs
+                    if t.destination_account_id == acc.id
+                    and t.transaction_type == TransactionType.TRANSFER
+                ),
+                Decimal("0.00"),
+            )
+            transfers_net = transfers_in - transfers_out
+            proj_bal = curr_bal + p_inc - p_exp + transfers_net
+            is_neg = proj_bal < Decimal("0.00")
+
+            total_curr += curr_bal
+            total_p_inc += p_inc
+            total_p_exp += p_exp
+            total_proj += proj_bal
+
+            acc_projections.append(
+                AccountBalanceProjection(
+                    account_id=acc.id,
+                    account_name=acc.name,
+                    account_type=acc.account_type,
+                    current_balance=f"{curr_bal:.2f}",
+                    pending_income=f"{p_inc:.2f}",
+                    pending_expense=f"{p_exp:.2f}",
+                    pending_transfers_net=f"{transfers_net:.2f}",
+                    projected_balance=f"{proj_bal:.2f}",
+                    is_projected_negative=is_neg,
+                )
+            )
+
+        ref_date = until_dt.date().isoformat()
+        response = DashboardProjectionsResponse(
+            reference_date=ref_date,
+            total_current_balance=f"{total_curr:.2f}",
+            total_pending_income=f"{total_p_inc:.2f}",
+            total_pending_expense=f"{total_p_exp:.2f}",
+            total_projected_balance=f"{total_proj:.2f}",
+            accounts=acc_projections,
         )
         return response.model_dump(mode="json")

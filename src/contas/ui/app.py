@@ -130,15 +130,57 @@ def main():
     if menu == "📊 Dashboard & Extrato":
         st.title("📊 Visão Geral das Finanças")
 
-        # Carregar Contas
+        # Carregar Contas e Projeções Financeiras
         accounts_data = UIService.list_accounts(user_id=current_user_id)
         accounts = accounts_data.get("accounts", [])
-        total_balance = sum(float(a["balance"]) for a in accounts)
+
+        projections_data = UIService.get_dashboard_projections(user_id=current_user_id)
+        proj_accounts = {
+            a["account_id"]: a for a in projections_data.get("accounts", [])
+        }
+        total_curr_balance = float(
+            projections_data.get("total_current_balance", "0.00")
+        )
+        total_proj_balance = float(
+            projections_data.get("total_projected_balance", "0.00")
+        )
+        total_pending_exp = float(projections_data.get("total_pending_expense", "0.00"))
+
+        # Alternador de Visão no Topo
+        dashboard_view_mode = st.radio(
+            "Modo de Visualização do Saldo",
+            options=[
+                "🟢 Saldo Atual (Realizado)",
+                "🔮 Saldo Projetado (Abatendo pendências do mês)",
+            ],
+            horizontal=True,
+            index=0,
+        )
+        is_projected = "Projetado" in dashboard_view_mode
 
         # Métricas no Topo
-        col_total, col_acc_count = st.columns([2, 1])
+        col_total, col_proj, col_pend, col_acc_count = st.columns([1.5, 1.5, 1.5, 1])
         with col_total:
-            st.metric("Patrimônio Total", format_currency(total_balance))
+            st.metric(
+                "Patrimônio Realizado",
+                format_currency(total_curr_balance),
+                help="Soma do saldo em conta que já considera todos os lançamentos quitados.",
+            )
+        with col_proj:
+            delta_proj = total_proj_balance - total_curr_balance
+            st.metric(
+                "Patrimônio Projetado",
+                format_currency(total_proj_balance),
+                delta=f"{delta_proj:+.2f}".replace(".", ","),
+                delta_color="normal",
+                help="Saldo previsto após a quitação de todas as receitas e despesas pendentes do mês corrente.",
+            )
+        with col_pend:
+            st.metric(
+                "Despesas a Pagar (Mês)",
+                format_currency(total_pending_exp),
+                help="Total de despesas pendentes com vencimento até o fim do mês.",
+            )
         with col_acc_count:
             st.metric("Contas Ativas", len(accounts))
 
@@ -146,10 +188,29 @@ def main():
         if accounts:
             cols = st.columns(min(len(accounts), 4))
             for i, acc in enumerate(accounts):
+                p_info = proj_accounts.get(acc["id"], {})
+                proj_val = float(p_info.get("projected_balance", acc["balance"]))
+                curr_val = float(acc["balance"])
+                is_negative = p_info.get("is_projected_negative", False)
+
+                display_val = proj_val if is_projected else curr_val
+                delta_str = (
+                    f"Projetado: {format_currency(proj_val)}"
+                    if not is_projected
+                    else f"Atual: {format_currency(curr_val)}"
+                )
+
                 with cols[i % 4]:
-                    st.container(border=True).metric(
+                    card = st.container(border=True)
+                    if is_projected and is_negative:
+                        card.error(
+                            f"⚠️ Atenção: Saldo projetado negativo ({format_currency(proj_val)})"
+                        )
+                    card.metric(
                         label=f"{acc['name']} ({acc['account_type'].upper()})",
-                        value=format_currency(acc["balance"]),
+                        value=format_currency(display_val),
+                        delta=delta_str,
+                        delta_color="off",
                     )
         else:
             st.info(
@@ -162,9 +223,13 @@ def main():
         st.subheader("📜 Extrato de Movimentações")
         if accounts:
             acc_by_id = {a["id"]: a for a in accounts}
-            filter_col1, filter_col_type, filter_col2, filter_col3, filter_col4 = (
-                st.columns([2, 1.5, 1, 1, 1])
-            )
+            (
+                filter_col1,
+                filter_col_type,
+                filter_col_status,
+                filter_col2,
+                filter_col3,
+            ) = st.columns([2, 1.3, 1.7, 1, 1])
             with filter_col1:
                 selected_acc_id = st.selectbox(
                     "Conta",
@@ -186,6 +251,27 @@ def main():
                     "due_date" if tipo_data == "Data Vencimento" else "transaction_date"
                 )
 
+            with filter_col_status:
+                status_options = [
+                    "Todas",
+                    "Apenas Pendentes (ocultar quitadas)",
+                    "Apenas Quitadas",
+                ]
+                selected_status_label = st.selectbox(
+                    "Status",
+                    options=status_options,
+                    index=0,
+                )
+                if selected_status_label == "Apenas Pendentes (ocultar quitadas)":
+                    status_filter_val = "pending"
+                    include_pending_val = True
+                elif selected_status_label == "Apenas Quitadas":
+                    status_filter_val = "cleared"
+                    include_pending_val = False
+                else:
+                    status_filter_val = "all"
+                    include_pending_val = True
+
             with filter_col2:
                 today = datetime.now(UTC).date()
                 start_date = st.date_input(
@@ -193,17 +279,14 @@ def main():
                 )
             with filter_col3:
                 end_date = st.date_input("Data Final", value=today + timedelta(days=60))
-            with filter_col4:
-                include_pending = st.checkbox(
-                    "Incluir parcelas futuras/pendentes", value=True
-                )
 
             if selected_acc:
                 statement = UIService.get_statement(
                     account_id=UUID(selected_acc["id"]),
                     start_date=start_date.isoformat(),
                     end_date=end_date.isoformat(),
-                    include_pending=include_pending,
+                    include_pending=include_pending_val,
+                    status_filter=status_filter_val,
                     date_type=date_type_val,
                     user_id=current_user_id,
                 )

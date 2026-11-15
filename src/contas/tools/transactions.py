@@ -37,7 +37,7 @@ def register_transaction_tools(mcp: MCPServer) -> None:
 
     @mcp.tool()
     async def get_statement(payload: GetStatementInput) -> dict:
-        """Get the detailed statement of an account for a given period."""
+        """Get the detailed statement of an account for a given period with optional settlement status filtering (all, cleared, pending)."""
         return await _execute_uc(
             lambda: get_container().get_statement_uc.execute(payload)
         )

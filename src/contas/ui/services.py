@@ -287,6 +287,7 @@ class UIService:
         start_date: str,
         end_date: str,
         include_pending: bool = True,
+        status_filter: str = "all",
         limit: int = 500,
         date_type: str = "transaction_date",
         search: str | None = None,
@@ -301,6 +302,7 @@ class UIService:
                     start_date=start_date,
                     end_date=end_date,
                     include_pending=include_pending,
+                    status_filter=status_filter,
                     limit=limit,
                     date_type=date_type,
                     search=search,
@@ -451,6 +453,23 @@ class UIService:
                 payload=ClearTransactionInput(
                     transaction_id=transaction_id,
                     user_id=user_id,
+                )
+            )
+        )
+
+    @staticmethod
+    def get_dashboard_projections(
+        user_id: UUID | None = None,
+        until_date: str | None = None,
+    ) -> dict:
+        container = get_container()
+        from contas.schemas.account import GetDashboardProjectionsInput
+
+        return run_async(
+            container.get_dashboard_projections_uc.execute(
+                GetDashboardProjectionsInput(
+                    user_id=user_id,
+                    until_date=until_date,
                 )
             )
         )

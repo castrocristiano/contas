@@ -130,3 +130,41 @@ class UpdateAccountInput(BaseModel):
         default=None,
         description=_OWNER_USER_DESC,
     )
+
+
+class AccountBalanceProjection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    account_id: UUID
+    account_name: str
+    account_type: str
+    current_balance: str
+    pending_income: str
+    pending_expense: str
+    pending_transfers_net: str
+    projected_balance: str
+    is_projected_negative: bool
+
+
+class GetDashboardProjectionsInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    user_id: UUID | None = Field(
+        default=None,
+        description=_OWNER_USER_DESC,
+    )
+    until_date: str | None = Field(
+        default=None,
+        description="Horizon date for pending transactions (ISO 8601 YYYY-MM-DD). Defaults to end of current month.",
+    )
+
+
+class DashboardProjectionsResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    reference_date: str
+    total_current_balance: str
+    total_pending_income: str
+    total_pending_expense: str
+    total_projected_balance: str
+    accounts: list[AccountBalanceProjection]
