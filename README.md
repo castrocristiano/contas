@@ -3,14 +3,14 @@
 [![CI & Tests](https://img.shields.io/github/actions/workflow/status/castrocristiano/contas/ci.yml?branch=main&label=CI%20%26%20Tests&logo=github)](https://github.com/castrocristiano/contas/actions)
 [![Python Version](https://img.shields.io/badge/python-3.12%2B-blue?logo=python&logoColor=white)](https://www.python.org/)
 [![Model Context Protocol](https://img.shields.io/badge/MCP-Protocol%20Native-orange?logo=anthropic)](https://modelcontextprotocol.io/)
-[![OpenAI Model](https://img.shields.io/badge/OpenAI-o3--mini%20(Default)-412991?logo=openai)](https://platform.openai.com/)
+[![OpenAI Model](https://img.shields.io/badge/OpenAI-gpt--4o%20(Default)-412991?logo=openai)](https://platform.openai.com/)
 [![Identity Provider](https://img.shields.io/badge/Auth-Keycloak%2026%20(OIDC)-008AAA?logo=keycloak&logoColor=white)](https://www.keycloak.org/)
 [![Framework](https://img.shields.io/badge/UI-Streamlit-FF4B4B?logo=streamlit&logoColor=white)](https://streamlit.io/)
 [![Database](https://img.shields.io/badge/Database-PostgreSQL%2016-336791?logo=postgresql&logoColor=white)](https://www.postgresql.org/)
 [![Container](https://img.shields.io/badge/Container-Podman%20%2F%20Docker-892CA0?logo=podman&logoColor=white)](https://podman.io/)
 [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
 
-> Sistema de gestão financeira pessoal e residencial construído sob os princípios de **Clean Architecture**, integrando assistentes de inteligência artificial através do padrão **Model Context Protocol (MCP)**, processamento inteligente de faturas em PDF via **OpenAI o3-mini**, gerenciamento centralizado de identidade com **Keycloak (OpenID Connect)**, isolamento estrito **multi-tenant** e esteira automatizada de CI/CD com **SonarQube Quality Gate**.
+> Sistema de gestão financeira pessoal e residencial construído sob os princípios de **Clean Architecture**, integrando assistentes de inteligência artificial através do padrão **Model Context Protocol (MCP)**, processamento inteligente de faturas em PDF via **OpenAI gpt-4o**, gerenciamento centralizado de identidade com **Keycloak (OpenID Connect)**, isolamento estrito **multi-tenant** e esteira automatizada de CI/CD com **SonarQube Quality Gate**.
 
 ---
 
@@ -39,7 +39,7 @@ O **Contas** foi desenvolvido como um projeto demonstrativo de **engenharia de s
 1. **Rigor e Precisão Financeira**: Uso exclusivo de `Decimal` em toda a cadeia (domínio, schemas e persistência), prevenindo erros de arredondamento de ponto flutuante binário (`float`).
 2. **Clean Architecture Desacoplada**: A lógica de negócios independe da interface web (Streamlit) e do banco (PostgreSQL/SQLModel). Os casos de uso podem ser executados via MCP Server, CLI ou Frontend.
 3. **Assistente de IA com MCP**: Qualquer cliente MCP (Claude Desktop, Antigravity, Cursor) pode consultar saldos, registrar despesas, liquidar lançamentos pendentes e checar limites orçamentários usando linguagem natural de forma padronizada.
-4. **Parser Inteligente de Faturas PDF**: Extração com o modelo **OpenAI `o3-mini`**, com pré-filtragem local em Python, resiliência a layouts multi-coluna bancários e defesas estritas anti-alucinação.
+4. **Parser Inteligente de Faturas PDF**: Extração com o modelo **OpenAI `gpt-4o`**, com pré-filtragem local em Python, resiliência a layouts multi-coluna bancários e defesas estritas anti-alucinação.
 5. **Autenticação Multi-Tenant com Keycloak (OIDC) e Aprovação**:
    - Gerenciamento de identidade centralizado com **Keycloak 26** (suportando SSO via navegador e login direto via *Direct Access Grant*, além de fallback local com `bcrypt`).
    - Cada usuário possui seus próprios dados 100% isolados por `user_id`.
@@ -75,7 +75,7 @@ flowchart TD
         Security["Módulos de Segurança<br>(Keycloak OIDC + bcrypt hash)"]
         PostgresDB[(PostgreSQL 16<br>Schemas: public & keycloak)]
         KeycloakIdP["Keycloak 26 IdP<br>(Realm: contas | Porta 8180)"]
-        OpenAIClient["OpenAI Client<br>(o3-mini / Structured Outputs)"]
+        OpenAIClient["OpenAI Client<br>(gpt-4o / Structured Outputs)"]
     end
 
     StreamlitApp --> Container
@@ -102,7 +102,7 @@ flowchart TD
 | **🏢 Isolamento Multi-Tenant** | Todas as contas, categorias, transações e orçamentos são vinculados a um `user_id`. Nenhum dado é compartilhado entre usuários. |
 | **📊 Dashboard & Extrato** | Visão patrimonial, saldo acumulado, gráfico de despesas por categoria, filtros dinâmicos por data de lançamento ou vencimento, liquidação de pendências e busca textual. |
 | **💳 Compras Parceladas** | Registro de compras em parcelas com projeção automática em cascata, cálculo de valor total e consulta de plano de quitação. |
-| **🧾 Importação de Fatura PDF** | Leitura automatizada de faturas de cartão de crédito bancárias (ex: Nubank, Itaú, Inter) com o modelo **OpenAI `o3-mini`**, seleção interativa de conta de destino e importação em lote. |
+| **🧾 Importação de Fatura PDF** | Leitura automatizada de faturas de cartão de crédito bancárias (ex: Nubank, Itaú, Inter) com o modelo **OpenAI `gpt-4o`**, seleção interativa de conta de destino e importação em lote. |
 | **💬 Assistente de Chat com IA** | Chat financeiro integrado que entende perguntas em linguagem natural e utiliza ferramentas MCP para consultar e gerenciar suas finanças. |
 | **🎯 Orçamentos & Metas** | Definição de limites mensais por categoria de despesa, com cálculo automático de porcentagem consumida e alertas visuais de estouro. |
 | **⚙️ Configurações & Gestão em Lote** | Criação e renomeação de contas, gestão de categorias, exclusão segura (soft-delete ou cascade) e seleção múltipla. |
@@ -117,7 +117,7 @@ flowchart TD
 | **Gerenciador de Pacotes** | [uv](https://github.com/astral-sh/uv) | Gerenciamento ultrarrápido de dependências e venvs |
 | **Interface Web** | [Streamlit](https://streamlit.io/) | Dashboard reativo, visual e interativo |
 | **Protocolo de IA** | [Model Context Protocol (MCP)](https://modelcontextprotocol.io/) | Exposição declarativa de ferramentas para LLMs |
-| **Modelos de IA** | [OpenAI `o3-mini`](https://platform.openai.com/) | Extração estruturada de PDFs e inteligência financeira |
+| **Modelos de IA** | [OpenAI `gpt-4o`](https://platform.openai.com/) | Extração estruturada de PDFs e inteligência financeira |
 | **Identidade & SSO** | [Keycloak 26](https://www.keycloak.org/) | Servidor OpenID Connect / OAuth 2.0 (porta `8180`) |
 | **ORM & Validação** | [SQLModel](https://sqlmodel.tiangolo.com/) & [Pydantic v2](https://docs.pydantic.dev/) | Modelagem relacional tipada e validação rigorosa de schemas |
 | **Banco de Dados** | [PostgreSQL 16](https://www.postgresql.org/) | Banco de dados transacional relacional com conformidade ACID |
@@ -234,7 +234,7 @@ DATABASE_URL=postgresql+psycopg://contas:contas@localhost:5432/contas
 
 # --- Inteligência Artificial (OpenAI) ---
 OPENAI_API_KEY=sk-proj-sua-chave-aqui
-INVOICE_MODEL=o3-mini
+INVOICE_MODEL=gpt-4o
 
 # --- Keycloak Identity Provider (OIDC) ---
 KEYCLOAK_PORT=8180
