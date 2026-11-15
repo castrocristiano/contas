@@ -20,6 +20,7 @@ from contas.application.use_cases.transactions import (
 from contas.domain.entities import Account, Category, Transaction
 from contas.domain.enums import (
     AccountType,
+    TransactionStatus,
     TransactionType,
 )
 from contas.domain.errors import (
@@ -195,6 +196,7 @@ class InMemoryTransactionRepository(ITransactionRepository):
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
         search: str | None = None,
+        status_filter: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Transaction]:
@@ -204,6 +206,10 @@ class InMemoryTransactionRepository(ITransactionRepository):
             if t.source_account_id == account_id
             and (user_id is None or t.user_id == user_id)
         ]
+        if status_filter == "cleared":
+            res = [t for t in res if t.status == TransactionStatus.CLEARED]
+        elif status_filter == "pending":
+            res = [t for t in res if t.status == TransactionStatus.PENDING]
         if search:
             res = [t for t in res if search.lower() in t.description.lower()]
         if start_date or end_date:
@@ -221,6 +227,21 @@ class InMemoryTransactionRepository(ITransactionRepository):
                 filtered.append(t)
             res = filtered
         return res[offset : offset + limit]
+
+    async def list_pending_by_user(
+        self,
+        user_id: UUID | None = None,
+        until_date: datetime | None = None,
+    ) -> list[Transaction]:
+        res = [
+            t
+            for t in self.transactions.values()
+            if t.status == TransactionStatus.PENDING
+            and (user_id is None or t.user_id == user_id)
+        ]
+        if until_date:
+            res = [t for t in res if (t.due_date or t.transaction_date) <= until_date]
+        return res
 
     async def list_by_installment_id(
         self, installment_id: UUID, user_id: UUID | None = None
