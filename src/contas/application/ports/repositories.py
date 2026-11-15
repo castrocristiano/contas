@@ -104,8 +104,15 @@ class ITransactionRepository(Protocol):
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
         search: str | None = None,
+        status_filter: str | None = None,
         limit: int = 50,
         offset: int = 0,
+    ) -> list[Transaction]: ...
+
+    async def list_pending_by_user(
+        self,
+        user_id: UUID | None = None,
+        until_date: datetime | None = None,
     ) -> list[Transaction]: ...
 
     async def list_by_installment_id(

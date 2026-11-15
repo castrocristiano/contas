@@ -36,6 +36,7 @@ from contas.application.use_cases.categories import (
 from contas.application.use_cases.transactions import (
     ClearTransactionUseCase,
     DeleteTransactionUseCase,
+    GetDashboardProjectionsUseCase,
     GetFinancialSummaryUseCase,
     GetInstallmentPlanUseCase,
     GetStatementUseCase,
@@ -84,6 +85,7 @@ class Container:
     delete_transaction_uc: DeleteTransactionUseCase
     clear_transaction_uc: ClearTransactionUseCase
     get_financial_summary_uc: GetFinancialSummaryUseCase
+    get_dashboard_projections_uc: GetDashboardProjectionsUseCase
 
     set_budget_uc: SetBudgetUseCase
     get_budget_status_uc: GetBudgetStatusUseCase
@@ -128,6 +130,9 @@ def get_container() -> Container:
         delete_transaction_uc=DeleteTransactionUseCase(account_repo, transaction_repo),
         clear_transaction_uc=ClearTransactionUseCase(account_repo, transaction_repo),
         get_financial_summary_uc=GetFinancialSummaryUseCase(account_repo),
+        get_dashboard_projections_uc=GetDashboardProjectionsUseCase(
+            account_repo, transaction_repo
+        ),
         set_budget_uc=SetBudgetUseCase(budget_repo, category_repo),
         get_budget_status_uc=GetBudgetStatusUseCase(budget_repo, category_repo),
     )

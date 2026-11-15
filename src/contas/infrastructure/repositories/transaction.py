@@ -190,6 +190,7 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
         end_date: datetime | None = None,
         date_type: str = "transaction_date",
         search: str | None = None,
+        status_filter: str | None = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[DomainTransaction]:
@@ -210,7 +211,34 @@ class SQLAlchemyTransactionRepository(ITransactionRepository):
                 query = query.where(date_col <= end_date)
             if search:
                 query = query.where(ORMTransaction.description.ilike(f"%{search}%"))
+            if status_filter == "cleared":
+                query = query.where(ORMTransaction.status == TransactionStatus.CLEARED)
+            elif status_filter == "pending":
+                query = query.where(ORMTransaction.status == TransactionStatus.PENDING)
             query = query.order_by(date_col.asc()).offset(offset).limit(limit)
+            results = (await session.exec(query)).all()
+            return [self._to_domain(t) for t in results]
+
+    async def list_pending_by_user(
+        self,
+        user_id: UUID | None = None,
+        until_date: datetime | None = None,
+    ) -> list[DomainTransaction]:
+        async with get_session() as session:
+            query = select(ORMTransaction).where(
+                ORMTransaction.status == TransactionStatus.PENDING
+            )
+            if user_id:
+                query = query.where(ORMTransaction.user_id == user_id)
+            if until_date:
+                query = query.where(
+                    (ORMTransaction.due_date <= until_date)
+                    | (
+                        ORMTransaction.due_date.is_(None)
+                        & (ORMTransaction.transaction_date <= until_date)
+                    )
+                )
+            query = query.order_by(ORMTransaction.transaction_date.asc())
             results = (await session.exec(query)).all()
             return [self._to_domain(t) for t in results]
 
