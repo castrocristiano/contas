@@ -833,13 +833,40 @@ def main():
             st.session_state["invoice_target_account_id"] = selected_acc_id
             chosen_account = acc_by_id[selected_acc_id]
         with col_cfg2:
-            model_options = ["o3-mini", "gpt-4o", "gpt-4o-mini"]
-            selected_model = st.selectbox(
-                "🤖 Modelo de IA (OpenAI)",
-                options=model_options,
-                index=0,
-                help="o3-mini: Modelo de raciocínio profundo, excelente para reconciliação contábil (padrão)\ngpt-4o: Multimodal rápido e robusto\ngpt-4o-mini: Econômico e ágil",
+            from contas.services.openai_models import (
+                DEFAULT_MODEL,
+                get_available_openai_models,
             )
+
+            available_models = get_available_openai_models()
+            default_idx = (
+                available_models.index(DEFAULT_MODEL)
+                if DEFAULT_MODEL in available_models
+                else 0
+            )
+
+            model_col, btn_refresh_col = st.columns([5, 1])
+            with model_col:
+                selected_model = st.selectbox(
+                    "🤖 Modelo de IA (OpenAI)",
+                    options=available_models,
+                    index=default_idx,
+                    help="gpt-4o: Modelo emblemático multimodal da OpenAI (padrão)\ngpt-4o-mini: Mais rápido e econômico\no1: Modelo avançado de raciocínio",
+                )
+            with btn_refresh_col:
+                st.write("")
+                st.write("")
+                if st.button(
+                    "🔄",
+                    help="Atualizar lista de modelos disponíveis na sua conta OpenAI",
+                    key="btn_refresh_openai_models",
+                ):
+                    with st.spinner("Atualizando modelos da OpenAI..."):
+                        get_available_openai_models(force_refresh=True)
+                    st.toast(
+                        "Lista de modelos OpenAI atualizada com sucesso!", icon="🔄"
+                    )
+                    st.rerun()
         with col_cfg3:
             pdf_file = st.file_uploader(
                 "Selecione o arquivo PDF da fatura", type=["pdf"]

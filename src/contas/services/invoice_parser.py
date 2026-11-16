@@ -132,40 +132,81 @@ def preprocess_invoice_text(text: str) -> str:
     """Pre-process extracted raw invoice text to split concatenated columns and isolate transactions.
 
     Handles layout quirks from Brazilian credit card invoices (e.g. Itaú, LuizaCred) where
-    two parallel transaction columns get joined on the same line, or cardholder headers
-    are merged with the first transaction of a column.
+    parallel transaction columns or table cells get joined on the same line, cardholder headers
+    are merged with transactions, or multiple transactions appear run-on without newlines.
     """
     if not text:
         return text
 
-    lines = text.split("\n")
-    processed_lines: list[str] = []
+    # Pattern to match transactions embedded in run-on text or concatenated columns:
+    # Starts with a date DD/MM or DD/MM/YYYY followed by a merchant name (letters/#/*/_/-),
+    # then the amount, and finishes before the next transaction date or end of line.
+    tx_start_pattern = re.compile(
+        r"(?:^|\s+)(?P<date>\d{2}/\d{2}(?:/\d{2,4})?)\s+(?P<rest>[A-Za-zÀ-ÿ0-9_\-\*\#].*?[-]?\s*\d+[\.,]\d{2}.*?)(?=(?:\s+\d{2}/\d{2}(?:/\d{2,4})?\s+[A-Za-zÀ-ÿ0-9_\-\*\#])|$)",
+        re.DOTALL,
+    )
 
-    # 1. Regex to split joined two-column transaction lines:
-    # Matches: DD/MM ... AMOUNT followed by DD/MM ...
-    # Ex: '15/01 LOJA EXEMPLO A 25,00 16/01 LOJA EXEMPLO B 50,00'
+    # 1. Regex to split joined two-column transaction lines with immediate date separation:
     two_col_tx_pattern = re.compile(
         r"^(\d{2}/\d{2}(?:/\d{2,4})?.*?[-]?\d+[\.,]\d{2})\s+(\d{2}/\d{2}(?:/\d{2,4})?.*)$"
     )
 
     # 2. Regex to split cardholder/card number header concatenated with transaction on same line:
-    # Ex: 'NOME DO CLIENTE(final 0000) 10/01 FARMACIA EXEMPLO 30,00'
     header_tx_pattern = re.compile(
-        r"^(.*?(?:final\s*\d+[^\d]*|\bCART[ÃA]O\b[^\d]*))\s+(\d{2}/\d{2}(?:/\d{2,4})?.*[-]?\d+[\.,]\d{2}.*)$",
+        r"^(.*?(?:final\s*\d+[^\d]*|\bCART[ÃA]O\b[^\d]*|\bTITULAR\b[^\d]*))\s+(\d{2}/\d{2}(?:/\d{2,4})?.*[-]?\d+[\.,]\d{2}.*)$",
         re.IGNORECASE,
     )
 
-    # 3. Regex to split words where a date is glued directly without spaces (common in wrapped table cells):
-    # Ex: '...texto12/09 LOJA EXEMPLO 01/03 45,00' -> '...texto' e '12/09 LOJA EXEMPLO 01/03 45,00'
+    # 3. Regex to split words where a date is glued directly without spaces:
     glued_date_pattern = re.compile(
         r"^(.*?)([A-Za-zÀ-ÿ]+)(\d{2}/\d{2}(?:/\d{2,4})?\s+.*[-]?\d+[\.,]\d{2}.*)$"
     )
 
+    lines = text.split("\n")
+    processed_lines: list[str] = []
+
     for line in lines:
         stripped = line.strip()
+        if not stripped:
+            continue
+
+        # Check if line has multiple concatenated transactions (e.g. Itaú table columns without newlines)
+        matches = list(tx_start_pattern.finditer(stripped))
+        if len(matches) > 1:
+            first_start = matches[0].start()
+            prefix = stripped[:first_start].strip()
+            if prefix:
+                processed_lines.append(prefix)
+
+            for m in matches:
+                item_text = f"{m.group('date')} {m.group('rest')}".strip()
+                header_match = re.search(
+                    r"(.*?)(Lançamentos:.*|DATA\s+ESTABELECIMENTO.*|VALOR\s+EM\s+R\$.*)",
+                    item_text,
+                    re.IGNORECASE,
+                )
+                if header_match and header_match.group(1).strip():
+                    processed_lines.append(header_match.group(1).strip())
+                    processed_lines.append(header_match.group(2).strip())
+                else:
+                    processed_lines.append(item_text)
+            continue
+        elif len(matches) == 1:
+            # Check if there is a header before the single transaction
+            first_start = matches[0].start()
+            prefix = stripped[:first_start].strip()
+            if prefix and (
+                "final" in prefix.lower()
+                or "cartão" in prefix.lower()
+                or "cartao" in prefix.lower()
+                or "titular" in prefix.lower()
+            ):
+                processed_lines.append(prefix)
+                processed_lines.append(stripped[first_start:].strip())
+                continue
+
         m_col = two_col_tx_pattern.match(stripped)
         if m_col:
-            # Emit Col 1 as a separate, distinct line with clean separation
             processed_lines.append(m_col.group(1).strip())
             processed_lines.append(m_col.group(2).strip())
             continue
@@ -252,13 +293,14 @@ def parse_invoice_with_openai(
         "3. NUNCA EXTRAIA DADOS DE SIMULAÇÕES OU OPÇÕES DE PAGAMENTO: ignore completamente seções de 'Opções de parcelamento', 'Simulação Saque Cash', 'Simulação de Compras parceladas', 'Parcelas fixas', 'Pagamento mínimo' e quaisquer valores de IOF ou juros meramente simulados contidos nessas tabelas explicativas.\n"
         "4. TOTAIS E RESUMOS: ignore linhas puramente totalizadoras gerais (ex: 'Total desta fatura', 'Lançamentos atuais', 'Total para próximas faturas'). Se a fatura trouxer linhas de encargos individuais (juros, multa, IOF), extraia cada uma individualmente. Se trouxer uma linha única como 'ENCARGOS (financiamento + moratório)' cobrada na fatura, extraia-a como encargo.\n"
         "5. Ignore linhas que representem pagamentos efetuados pelo cliente (ex: 'Pagamento recebido', 'Pagamento efetuado', 'Pagamento de fatura'). Ajustes a crédito ou estornos de centavos (ex: '- 0,01') não devem impedir a extração das outras compras da mesma data.\n"
-        "6. NÃO OMITA NENHUMA COMPRA: analise minuciosamente todas as linhas de compras, inclusive compras antigas parceladas listadas no início da fatura e compras de parcelas intermediárias (ex: parcelas 02/04, 02/05, 03/03).\n"
-        "7. Identifique transações de faturas futuras (seção 'Próximas faturas', 'Lançamentos futuros' ou parcelas com vencimento posterior ao fechamento) e marque 'is_future=True'. Para transações da fatura atual, marque 'is_future=False'.\n"
-        "8. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar na linha, deduza com base no período/emissão da fatura.\n"
+        "6. COMPRAS COM DATAS ANTERIORES E PARCELAS (CRÍTICO - NUNCA OMITA): em faturas de cartão de crédito brasileiras (ex: Itaú, Nubank, Bradesco), compras parceladas SEMPRE exibem a DATA ORIGINAL DA COMPRA, que pode ter ocorrido semanas, meses ou até no ano anterior ao fechamento da fatura (ex: '04/10', '18/10', '19/05' em fatura de Julho/2026). TODAS as transações que constam na seção de compras atuais ('Lançamentos: compras e saques', 'Lançamentos atuais', 'Lançamentos no cartão') PERTENCEM À FATURA ATUAL e DEVEM SER MARCADAS COM is_future=False. NUNCA descarte ou omita uma transação só porque a data dela é anterior à emissão da fatura! Exemplo: '19/05 HealthMediaInc 02/03 303,33' listada nos lançamentos de uma fatura de Julho/2026 É UMA COMPRA DA FATURA ATUAL (a parcela 02/03 está sendo cobrada nesta fatura), e DEVE ser obrigatoriamente extraída com date='2026-05-19', amount='303.33', installment_current=2, installment_total=3 e is_future=False.\n"
+        "7. DISTINÇÃO ENTRE FATURA ATUAL E PRÓXIMAS FATURAS: transações listadas na seção principal de compras ('Lançamentos: compras e saques', 'Lançamentos atuais') DEVEM ter is_future=False. Apenas transações que estiverem expressamente sob títulos de faturas futuras (ex: 'Compras parceladas - próximas faturas', 'Lançamentos futuros', 'Demais faturas') DEVEM ser marcadas com is_future=True.\n"
+        "8. Formate cada data no formato 'YYYY-MM-DD'. Se o ano não constar expressamente na linha, deduza com base no período/emissão da fatura: se o mês da compra for maior que o mês da fatura (ex: compras em meses 10, 11, 12 listadas em fatura de Julho/2026), a compra ocorreu no ano anterior (ex: '04/10' -> '2025-10-04'); se o mês for menor ou igual ao mês da fatura (ex: compras em meses 01 a 07 em fatura de Julho/2026), a compra ocorreu no mesmo ano da fatura (ex: '19/05' -> '2026-05-19').\n"
         "9. O campo amount deve conter apenas números decimais positivos com ponto (ex: '29.90').\n"
         "10. Se a linha indicar parcelas em qualquer formato (ex: '02/10', 'Parcela 3 de 5', 'D02/04', '02/04' no final do nome do estabelecimento ou na descrição), extraia obrigatoriamente installment_current e installment_total.\n"
         f"11. Categorize cada item sugerindo a melhor opção dentre as existentes: [{categories_list_str}]. Para encargos e juros, categorize apropriadamente (ex: 'Tarifas', 'Encargos', 'Juros' ou 'Outros'). Se não houver categoria adequada, use 'Outros'.\n"
         "12. Identifique também o 'invoice_due_date' (data de vencimento da fatura, formato 'YYYY-MM-DD'), 'invoice_period' (ex: 'Setembro/2026') e 'invoice_total_amount' (valor total da fatura/boleto impresso no cabeçalho ou resumo, apenas números positivos com ponto, ex: '4138.00').\n"
+        "13. RECONCILIAÇÃO MATEMÁTICA: A soma dos valores (amount) de todas as compras da fatura atual (onde is_future=False) deve coincidir com o total de lançamentos atuais da fatura. Não omita nenhuma compra de datas anteriores nem compras parceladas intermediárias.\n"
     )
 
     model_to_use = model or settings.invoice_model or "gpt-4o"
@@ -270,6 +312,7 @@ def parse_invoice_with_openai(
             {"role": "user", "content": f"Texto da fatura:\n\n{clean_text}"},
         ],
         response_format=InvoiceExtractionContainer,
+        max_completion_tokens=16384,
         store=settings.openai_store,
         metadata={"app": "contas", "feature": "invoice_parser"},
     )
@@ -364,6 +407,7 @@ def refine_items_with_chat(
             },
         ],
         response_format=ChatRefinementContainer,
+        max_completion_tokens=16384,
         store=settings.openai_store,
         metadata={"app": "contas", "feature": "invoice_refinement"},
     )
