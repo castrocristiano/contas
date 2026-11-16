@@ -1,6 +1,6 @@
 # 🧾 04. Parser de Faturas e IA
 
-A importação manual de despesas de cartão de crédito é um dos maiores pontos de atrito no controle financeiro pessoal. O **Contas** resolve esse desafio com um pipeline automatizado que combina processamento local de documentos em Python com a inteligência do modelo de raciocínio **OpenAI `o3-mini`**.
+A importação manual de despesas de cartão de crédito é um dos maiores pontos de atrito no controle financeiro pessoal. O **Contas** resolve esse desafio com um pipeline automatizado que combina processamento local de documentos em Python (`pypdf` e regex linear) com a inteligência multimodal e estruturada do modelo **OpenAI `gpt-4o`** (com suporte a carregamento dinâmico de modelos).
 
 ---
 
@@ -8,33 +8,38 @@ A importação manual de despesas de cartão de crédito é um dos maiores ponto
 
 ```mermaid
 flowchart LR
-    PDF[Fatura em PDF<br>Nubank, Inter, Itaú, etc.] --> PyMuPDF[Extração de Texto<br>PyMuPDF fitz]
-    PyMuPDF --> PreFilter[Pré-filtragem Heurística<br>Regex de Linhas e Despesas]
-    PreFilter --> LLMPrompt[Prompt Otimizado<br>OpenAI o3-mini]
-    LLMPrompt --> StructuredOutput[Structured Outputs<br>Pydantic Strict Schema]
-    StructuredOutput --> Validation[Validação Anti-Alucinação<br>Soma matemática e datas]
-    Validation --> ReviewUI[Interface de Revisão<br>Streamlit Data Editor]
+    PDF[Fatura em PDF<br>Nubank, Inter, Itaú, etc.] --> PyPDF[Extração de Texto<br>pypdf]
+    PyPDF --> PreFilter[Pré-processamento Linear<br>Desmembramento de Colunas e Linhas Contínuas]
+    PreFilter --> LLMPrompt[Prompt Otimizado<br>OpenAI gpt-4o / Dinâmico]
+    LLMPrompt --> StructuredOutput[Structured Outputs<br>InvoiceExtractionContainer]
+    StructuredOutput --> Validation[Validação & Reconciliação<br>Soma matemática e log de divergências]
+    Validation --> ReviewUI[Interface de Revisão & Chat<br>Streamlit Data Editor + Refinamento]
     ReviewUI --> DB[(Gravação Atômica<br>PostgreSQL)]
 ```
 
 ---
 
-## 🧠 Por que usar o modelo OpenAI `o3-mini`?
+## 🧠 Modelos de IA e Carregamento Dinâmico
 
-O modelo `o3-mini` é especializado em tarefas de alta complexidade analítica e raciocínio estruturado:
-1. **Compreensão de Tabelas Complexas**: Faturas brasileiras frequentemente possuem layouts com duas ou três colunas na mesma página, misturando transações de titulares e adicionais.
-2. **Separação de Compras Parceladas**: Identifica automaticamente menções como `"Parcela 02/10"` e separa a despesa do plano parcelado.
-3. **Ignora Ruídos e Metadados**: Discrimina lançamentos reais de pagamentos de fatura anterior, encargos já quitados, pontos de fidelidade e informativos bancários.
+O sistema adota o modelo **`gpt-4o`** como padrão, combinando alta velocidade, precisão multimodal e suporte a saídas estruturadas estritas (*Structured Outputs*):
+
+1. **Carregamento Dinâmico via API**: A interface consulta diretamente os modelos disponíveis na conta da OpenAI (`client.models.list()`), filtrando apenas modelos de chat compatíveis (`gpt-4*`, `o1*`) e excluindo modelos obsoletos ou incompatíveis (`whisper`, `embedding`, `o3-mini`, etc.).
+2. **Cache em Memória & Botão Refresh (🔄)**: A lista de modelos é cacheada por 1 hora para evitar requisições redundantes a cada interação da UI, com botão manual de atualização com feedback instantâneo.
+3. **Fallback Resiliente**: Caso a chave da API esteja temporariamente indisponível ou ocorra falha de rede, o sistema opera com fallback seguro (`gpt-4o`, `gpt-4o-mini`, `o1`).
 
 ---
 
-## 🛡️ Defesas Anti-Alucinação e Integridade
+## 🛡️ Defesas Anti-Alucinação, Integridade e Resiliência a Faturas Brasileiras
 
-Modelos de linguagem não devem ser confiados cegamente para manipulação contábil. Por isso, o sistema implementa **três camadas de segurança**:
+Modelos de linguagem requerem defesas rigorosas para manipulação contábil:
 
-1. **Pré-filtragem em Python**:
-   - Linhas que não contêm padrões de data (`DD/MM`) e valor monetário são removidas antes do envio ao modelo, reduzindo o custo de tokens em até 70% e eliminando alucinações de texto corrido.
-2. **Schema Estrito com Pydantic**:
-   - A resposta da OpenAI é forçada via parâmetro `response_format` para um modelo Pydantic estrito (`InvoiceParseResponse`), garantindo que nenhum campo retorne em formato inconsistente.
-3. **Revisão e Seleção Humana (Human-in-the-Loop)**:
-   - Os lançamentos são apresentados em uma tabela interativa (`st.data_editor`) com checkboxes, permitindo ao usuário revisar descrições, alterar categorias sugeridas e selecionar apenas os itens que deseja importar.
+1. **Pré-Processamento Linear de Colunas e Parágrafos Concatenados (`preprocess_invoice_text`)**:
+   - Faturas como as do Itaú/LuizaCred frequentemente apresentam múltiplas transações em colunas paralelas ou agrupadas em bloco corrido sem quebras de linha (`\n`). O pré-processador linear identifica padrões de data (`DD/MM`), estabelecimentos e valores, isolando cada lançamento em uma linha independente antes do envio ao modelo.
+2. **Compras Parceladas com Datas Anteriores (Regra Anti-Omissão)**:
+   - Em cartões brasileiros, compras parceladas exibem a data da compra original (meses ou ano anterior). O prompt instrui expressamente o modelo a nunca descartar despesas da seção corrente por terem data anterior ao fechamento da fatura (marcando-as corretamente com `is_future=False`).
+3. **Teto de Saída Estendido (`max_completion_tokens=16384`)**:
+   - Garante capacidade de resposta para faturas volumosas (mais de 100 lançamentos entre compras atuais e parcelas futuras) sem cortes prematuros de JSON.
+4. **Reconciliação Matemática Automática**:
+   - O sistema calcula a soma dos itens extraídos da fatura atual e compara com o valor total informado no cabeçalho/resumo do documento, registrando log detalhado de conferência (`RECONCILIAÇÃO PERFEITA ✅` ou alerta de divergência).
+5. **Revisão Humana e Chat de Refinamento (Human-in-the-Loop)**:
+   - Tabela interativa (`st.data_editor`) e assistente de chat para filtrar, recategorizar e marcar despesas antes da persistência final no banco.

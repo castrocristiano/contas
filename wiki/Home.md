@@ -1,6 +1,6 @@
 # Bem-vindo à Wiki do Contas 💰
 
-O **Contas** é um sistema completo de gestão financeira pessoal e residencial desenvolvido com os mais modernos padrões de Engenharia de Software, incluindo **Clean Architecture**, **Model Context Protocol (MCP)**, **OpenAI o3-mini**, autenticação centralizada com **Keycloak 26 (OpenID Connect)**, isolamento multi-tenant com **aprovação de novos usuários por administrador** e esteira automatizada de CI/CD com **SonarQube**.
+O **Contas** é um sistema completo de gestão financeira pessoal e residencial desenvolvido com os mais modernos padrões de Engenharia de Software, incluindo **Clean Architecture**, **Model Context Protocol (MCP)**, **OpenAI gpt-4o**, autenticação centralizada com **Keycloak 26 (OpenID Connect)**, isolamento multi-tenant com **aprovação de novos usuários por administrador** e esteira automatizada de CI/CD com **SonarQube**.
 
 Esta Wiki foi estruturada para detalhar cada aspecto arquitetural, de segurança, de inteligência artificial, de infraestrutura e de fluxo de desenvolvimento (Gitflow) do projeto.
 
@@ -29,9 +29,9 @@ Para explorar os detalhes do sistema, navegue pelos capítulos abaixo ou utilize
    - Criptografia e segurança de senhas locais com `bcrypt`.
 
 4. [🧾 **04. Parser de Faturas e IA**](04-Parser-de-Faturas-e-IA)
-   - Pipeline de extração de PDFs com o modelo **OpenAI `o3-mini`**.
-   - Pré-filtragem local em Python para redução de tokens e ruídos.
-   - Resiliência a layouts multi-coluna de bancos brasileiros (Nubank, Inter, Itaú, etc.).
+   - Pipeline de extração de PDFs com o modelo **OpenAI `gpt-4o`** e seleção dinâmica de modelos.
+   - Pré-processamento linear em Python para isolamento de transações concatenadas e colunas paralelas.
+   - Resiliência a layouts bancários complexos (Nubank, Inter, Itaú, etc.) e compras parceladas de meses anteriores.
    - Defesas anti-alucinação e validação matemática de somas.
 
 5. [🚀 **05. Guia de Instalação e Deploy**](05-Guia-de-Instalacao-e-Deploy)
@@ -40,7 +40,7 @@ Para explorar os detalhes do sistema, navegue pelos capítulos abaixo ou utilize
    - Passo a passo para execução local com `uv` e migrações com Alembic.
 
 6. [📐 **06. Metodologia Spec-Driven**](06-Metodologia-Spec-Driven)
-   - Como o projeto é guiado pela metodologia Spec Kit (`specs/001` a `022`).
+   - Como o projeto é guiado pela metodologia Spec Kit (`specs/001` a `024`).
    - Ciclo de vida: Especificação (`spec.md`), Planejamento (`plan.md`), Tarefas (`tasks.md`) e Implementação.
    - Skills e Regras do Agente (`.agents/skills/formatter` e `.agents/rules/formatter.md`).
 

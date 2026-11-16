@@ -100,9 +100,9 @@ flowchart TD
 | :--- | :--- |
 | **🔐 Autenticação & Keycloak OIDC** | Login SSO e Direct Grant via Keycloak (realm `contas`), cadastro local com `bcrypt`, mapeamento de roles (`admin`/`user`) e painel administrativo de aprovação de usuários. |
 | **🏢 Isolamento Multi-Tenant** | Todas as contas, categorias, transações e orçamentos são vinculados a um `user_id`. Nenhum dado é compartilhado entre usuários. |
-| **📊 Dashboard & Extrato** | Visão patrimonial, saldo acumulado, gráfico de despesas por categoria, filtros dinâmicos por data de lançamento ou vencimento, liquidação de pendências e busca textual. |
+| **📊 Dashboard & Extrato** | Visão patrimonial, saldo acumulado e projetado (com abatimento de pendências), gráfico de despesas por categoria, filtros de liquidação (todas, apenas pendentes ou já quitadas), filtros por data de lançamento ou vencimento, quitação de pendências e busca textual. |
 | **💳 Compras Parceladas** | Registro de compras em parcelas com projeção automática em cascata, cálculo de valor total e consulta de plano de quitação. |
-| **🧾 Importação de Fatura PDF** | Leitura automatizada de faturas de cartão de crédito bancárias (ex: Nubank, Itaú, Inter) com o modelo **OpenAI `gpt-4o`**, seleção interativa de conta de destino e importação em lote. |
+| **🧾 Importação de Fatura PDF** | Leitura automatizada de faturas de cartão de crédito em PDF (ex: Nubank, Itaú, Inter) com o modelo **OpenAI `gpt-4o`** e seleção dinâmica de modelos da conta OpenAI, seleção interativa de conta de destino, reconciliação matemática e importação em lote. |
 | **💬 Assistente de Chat com IA** | Chat financeiro integrado que entende perguntas em linguagem natural e utiliza ferramentas MCP para consultar e gerenciar suas finanças. |
 | **🎯 Orçamentos & Metas** | Definição de limites mensais por categoria de despesa, com cálculo automático de porcentagem consumida e alertas visuais de estouro. |
 | **⚙️ Configurações & Gestão em Lote** | Criação e renomeação de contas, gestão de categorias, exclusão segura (soft-delete ou cascade) e seleção múltipla. |

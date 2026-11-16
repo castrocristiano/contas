@@ -24,13 +24,11 @@ Cada funcionalidade desenvolvida no projeto possui sua própria pasta versionada
 
 ```text
 specs/
-├── 015-edit-account-name/
-├── 016-multi-tenant-auth/
-├── 017-auth-google-oauth-and-registration/
-├── 018-google-oauth-and-change-password/
-├── 019-github-wiki-and-portfolio-readme/
 ├── 020-clear-transaction-and-multi-tenant-fixes/
-└── 021-keycloak-identity-and-auth/
+├── 021-keycloak-identity-and-auth/
+├── 022-golang-cicd/
+├── 023-settlement-filters/
+└── 024-dynamic-llm-models/
     ├── spec.md        # Especificação detalhada com Requisitos Funcionais e Critérios de Sucesso
     ├── plan.md        # Desenho de arquitetura, contratos e fluxos envolvidos
     └── tasks.md       # Lista de tarefas atômicas executadas com marcação de progresso [x]
