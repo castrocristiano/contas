@@ -12,7 +12,7 @@ class Settings(BaseSettings):
     openapi_key: str = ""
     openai_api_key: str = ""
     openaiapi_key: str = ""
-    invoice_model: str = "o3-mini"
+    invoice_model: str = "gpt-4o"
     openai_store: bool = True
     debug: bool = False
 
