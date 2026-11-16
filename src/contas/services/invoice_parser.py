@@ -289,7 +289,7 @@ def parse_invoice_with_openai(
         "Analise o texto da fatura e extraia todas as despesas individuais, compras, tarifas, juros, IOF, multas e encargos cobrados na fatura atual ou previstos para próximas faturas.\n"
         "Regras fundamentais:\n"
         "1. Extraia compras, despesas, tarifas de anuidade, juros reais cobrados, encargos financeiros, multas e IOF efetivo como despesas com valor positivo.\n"
-        "2. ENCARGOS COBRADOS NESTA FATURA (OBRIGATÓRIO): na seção 'Encargos cobrados nesta fatura' ou no extrato detalhado, extraia OBRIGATORIAMENTE todos os encargos e tarifas aplicados (ex: 'Juros do rotativo', 'Juros de mora', 'Multa por atraso', 'IOF', 'IOF de financiamento', 'Encargos de atraso', 'Encargos de financiamento'). A data desses encargos deve ser a data de fechamento ou vencimento da fatura. NUNCA omita nenhum encargo ou juros cobrado na fatura.\n"
+        "2. ENCARGOS COBRADOS NESTA FATURA (OBRIGATÓRIO): na seção 'Encargos cobrados nesta fatura' ou no extrato detalhado, extraia OBRIGATORIAMENTE todos os encargos e tarifas que tenham sido EFETIVAMENTE COBRADOS com valor maior que zero (ex: 'Juros do rotativo', 'Juros de mora', 'Multa por atraso', 'IOF', 'IOF de financiamento', 'Encargos de atraso', 'Encargos de financiamento'). A data desses encargos deve ser a data de fechamento ou vencimento da fatura. NUNCA extraia encargos com valor 0,00 ou zerados (ex: 'Juros do rotativo 0,00' deve ser IGNORADO pois não houve cobrança). NUNCA omita nenhum encargo ou juros cobrado na fatura.\n"
         "3. NUNCA EXTRAIA DADOS DE SIMULAÇÕES OU OPÇÕES DE PAGAMENTO: ignore completamente seções de 'Opções de parcelamento', 'Simulação Saque Cash', 'Simulação de Compras parceladas', 'Parcelas fixas', 'Pagamento mínimo' e quaisquer valores de IOF ou juros meramente simulados contidos nessas tabelas explicativas.\n"
         "4. TOTAIS E RESUMOS: ignore linhas puramente totalizadoras gerais (ex: 'Total desta fatura', 'Lançamentos atuais', 'Total para próximas faturas'). Se a fatura trouxer linhas de encargos individuais (juros, multa, IOF), extraia cada uma individualmente. Se trouxer uma linha única como 'ENCARGOS (financiamento + moratório)' cobrada na fatura, extraia-a como encargo.\n"
         "5. Ignore linhas que representem pagamentos efetuados pelo cliente (ex: 'Pagamento recebido', 'Pagamento efetuado', 'Pagamento de fatura'). Ajustes a crédito ou estornos de centavos (ex: '- 0,01') não devem impedir a extração das outras compras da mesma data.\n"
@@ -318,6 +318,11 @@ def parse_invoice_with_openai(
     )
 
     parsed = completion.choices[0].message.parsed
+
+    # Filter out zero or negative items (e.g. uncharged fee rows like 'Juros 0,00')
+    parsed.items = [
+        it for it in parsed.items if (float(it.amount) > 0 if it.amount else False)
+    ]
 
     # Reconciliação Matemática em Log
     try:
@@ -413,5 +418,12 @@ def refine_items_with_chat(
     )
 
     parsed = completion.choices[0].message.parsed
+
+    # Filter out zero or negative items (e.g. uncharged fee rows like 'Juros 0,00')
+    parsed.updated_items = [
+        it
+        for it in parsed.updated_items
+        if (float(it.amount) > 0 if it.amount else False)
+    ]
     updated_dicts = [item.model_dump() for item in parsed.updated_items]
     return updated_dicts, parsed.assistant_reply

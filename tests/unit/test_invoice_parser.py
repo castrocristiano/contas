@@ -397,3 +397,40 @@ def test_preprocess_invoice_text_run_on_transactions_and_past_dates():
     assert any("HealthMediaInc" in line and "19/05" in line for line in lines)
     assert any("LOJAS PALUDO" in line and "04/10" in line for line in lines)
     assert any("UberRides" in line and "10/06" in line for line in lines)
+
+
+def test_parse_invoice_filters_zero_amount():
+    mock_client = MagicMock()
+    mock_parsed = InvoiceExtractionContainer(
+        invoice_period="Setembro/2026",
+        items=[
+            ExtractedInvoiceItem(
+                date="2026-09-02",
+                description="Juros do rotativo",
+                amount="0.00",
+                category_suggestion="Outros",
+            ),
+            ExtractedInvoiceItem(
+                date="2026-09-05",
+                description="Amazon",
+                amount="89.90",
+                category_suggestion="Outros",
+            ),
+        ],
+    )
+
+    mock_choice = MagicMock()
+    mock_choice.message.parsed = mock_parsed
+    mock_client.beta.chat.completions.parse.return_value = MagicMock(
+        choices=[mock_choice]
+    )
+
+    result = parse_invoice_with_openai(
+        pdf_text="Fatura...",
+        categories=["Outros"],
+        client=mock_client,
+    )
+
+    assert len(result.items) == 1
+    assert result.items[0].description == "Amazon"
+    assert result.items[0].amount == "89.90"

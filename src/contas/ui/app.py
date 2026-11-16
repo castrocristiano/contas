@@ -1070,6 +1070,14 @@ def main():
             default_inv_select = st.session_state[invoice_select_key]
             df_import = []
             for idx, item in enumerate(items):
+                try:
+                    item_amount = float(item.get("amount", 0))
+                except (ValueError, TypeError):
+                    item_amount = 0.0
+
+                if item_amount <= 0:
+                    continue
+
                 is_fut = bool(item.get("is_future", False))
                 if not include_future_txs and is_fut:
                     continue
@@ -1115,7 +1123,7 @@ def main():
                         "Data Compra": parsed_date,
                         "Vencimento": item_due_date,
                         "Descrição": item["description"],
-                        "Valor": float(item["amount"]),
+                        "Valor": item_amount,
                         "Categoria": item.get("category_suggestion") or "Outros",
                         "Parcela": inst_text,
                         "Fatura Futura?": is_fut,
@@ -1229,7 +1237,15 @@ def main():
                                 if matched_cat:
                                     cat_id = UUID(matched_cat["id"])
 
-                                val_str = f"{row['Valor']:.2f}"
+                                try:
+                                    val_float = float(row["Valor"])
+                                except (ValueError, TypeError):
+                                    val_float = 0.0
+
+                                if val_float <= 0:
+                                    continue
+
+                                val_str = f"{val_float:.2f}"
                                 dt_col = row["Data Compra"]
                                 if hasattr(dt_col, "strftime"):
                                     row_date_str = dt_col.strftime("%Y-%m-%d")
